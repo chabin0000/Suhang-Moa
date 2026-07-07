@@ -1,5 +1,9 @@
 # ClassMap MVP
 
+## 실행 링크
+
+- GitHub Pages: https://chabin0000.github.io/-/
+
 ## 한 줄 소개
 
 ClassMap은 고등학생이 가입 없이 로컬 브라우저에서 학년/반별 수행평가, 지필평가, 과제, 준비물 일정을 관리하는 캘린더 웹앱 MVP입니다.
