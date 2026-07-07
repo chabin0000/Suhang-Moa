@@ -11,6 +11,27 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      const isGitHubPages =
+        location.hostname === "chabin0000.github.io" &&
+        location.pathname.startsWith("/Suhang-Moa/");
+
+      if (isGitHubPages) {
+        const style = document.createElement("link");
+        style.rel = "stylesheet";
+        style.href = "/Suhang-Moa/assets/main.css";
+        document.head.appendChild(style);
+
+        const script = document.createElement("script");
+        script.type = "module";
+        script.src = "/Suhang-Moa/assets/app.js";
+        document.body.appendChild(script);
+      } else {
+        const script = document.createElement("script");
+        script.type = "module";
+        script.src = "/src/main.tsx";
+        document.body.appendChild(script);
+      }
+    </script>
   </body>
 </html>
