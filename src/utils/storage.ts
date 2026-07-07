@@ -1,0 +1,80 @@
+import type { Schedule, SelectedClass } from "../types";
+import { SCHEDULE_TYPES } from "../types";
+
+const SELECTED_CLASS_KEY = "classmap:selectedClass";
+const SCHEDULES_KEY = "classmap:schedules";
+
+function readJson<T>(key: string, fallback: T): T {
+  const rawValue = window.localStorage.getItem(key);
+
+  if (!rawValue) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(rawValue) as T;
+  } catch {
+    // 저장값이 깨졌을 때 앱 전체가 멈추지 않도록 기본값으로 복구한다.
+    return fallback;
+  }
+}
+
+function isSelectedClass(value: unknown): value is SelectedClass {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as SelectedClass;
+  return (
+    Number.isInteger(candidate.grade) &&
+    candidate.grade >= 1 &&
+    candidate.grade <= 3 &&
+    Number.isInteger(candidate.classNo) &&
+    candidate.classNo >= 1 &&
+    candidate.classNo <= 12
+  );
+}
+
+function isSchedule(value: unknown): value is Schedule {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Schedule;
+  return (
+    typeof candidate.id === "string" &&
+    Number.isInteger(candidate.grade) &&
+    Number.isInteger(candidate.classNo) &&
+    typeof candidate.title === "string" &&
+    typeof candidate.type === "string" &&
+    SCHEDULE_TYPES.includes(candidate.type) &&
+    typeof candidate.dueDate === "string" &&
+    typeof candidate.createdAt === "string"
+  );
+}
+
+export function getSelectedClass(): SelectedClass | null {
+  const savedClass = readJson<unknown>(SELECTED_CLASS_KEY, null);
+  return isSelectedClass(savedClass) ? savedClass : null;
+}
+
+export function saveSelectedClass(selectedClass: SelectedClass): void {
+  window.localStorage.setItem(SELECTED_CLASS_KEY, JSON.stringify(selectedClass));
+}
+
+export function getSchedules(): Schedule[] {
+  const savedSchedules = readJson<unknown>(SCHEDULES_KEY, []);
+  return Array.isArray(savedSchedules) ? savedSchedules.filter(isSchedule) : [];
+}
+
+export function saveSchedules(schedules: Schedule[]): void {
+  window.localStorage.setItem(SCHEDULES_KEY, JSON.stringify(schedules));
+}
+
+export function createScheduleId(): string {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
