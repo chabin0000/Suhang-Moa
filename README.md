@@ -2,7 +2,7 @@
 
 ## 실행 링크
 
-- GitHub Pages: https://chabin0000.github.io/-/
+- GitHub Pages: https://chabin0000.github.io/Suhang-Moa/
 
 ## 한 줄 소개
 
