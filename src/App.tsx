@@ -7,9 +7,11 @@ import { getSelectedClass, saveSelectedClass } from "./utils/storage";
 type Screen = "select" | "dashboard";
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("select");
   const [selectedClass, setSelectedClass] = useState<SelectedClass | null>(() =>
     getSelectedClass(),
+  );
+  const [screen, setScreen] = useState<Screen>(() =>
+    selectedClass ? "dashboard" : "select",
   );
 
   function handleEnterClass(nextClass: SelectedClass) {
