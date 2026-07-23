@@ -74,8 +74,10 @@ describe("Firestore access policy", () => {
   it("allows only published public events and opinions below published events", async () => {
     const publicDb = testEnv.unauthenticatedContext().firestore();
     await assertSucceeds(getDocs(query(collection(publicDb, "classes", classId, "events"), where("status", "==", "published"), limit(50))));
+    await assertFails(getDocs(query(collection(publicDb, "classes", classId, "events"), limit(50))));
     await assertFails(getDoc(doc(publicDb, "classes", classId, "events", "event-archived")));
     await assertSucceeds(getDocs(query(collection(publicDb, "classes", classId, "events", "event-published", "opinions"), where("status", "==", "published"), limit(50))));
+    await assertFails(getDocs(query(collection(publicDb, "classes", classId, "events", "event-published", "opinions"), limit(50))));
   });
 
   it("enforces anonymous ownership, exact pending proposal fields, and bounded own history", async () => {
