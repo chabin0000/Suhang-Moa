@@ -48,16 +48,20 @@ function storedProposal(overrides: Record<string, unknown> = {}) {
 
 describe("proposal Firebase runtime adapter", () => {
   let authListener: AuthListener | undefined;
+  let authUnsubscribe: ReturnType<typeof vi.fn>;
   const snapshotListeners: Array<{ next: SnapshotNext; error: SnapshotError }> = [];
+  const proposalUnsubscribes: Array<ReturnType<typeof vi.fn>> = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
     snapshotListeners.length = 0;
+    proposalUnsubscribes.length = 0;
+    authUnsubscribe = vi.fn();
     firebaseAppMock.getFirebaseAuth.mockReturnValue({ kind: "auth" });
     firebaseAppMock.getFirestoreDb.mockReturnValue(db);
     authSdkMock.onAuthStateChanged.mockImplementation((_auth: unknown, listener: AuthListener) => {
       authListener = listener;
-      return vi.fn();
+      return authUnsubscribe;
     });
     firestoreMock.collection.mockReturnValue({ kind: "proposal-collection" });
     firestoreMock.where.mockReturnValue({ kind: "owner-filter" });
@@ -66,7 +70,9 @@ describe("proposal Firebase runtime adapter", () => {
     firestoreMock.query.mockReturnValue({ kind: "proposal-query" });
     firestoreMock.onSnapshot.mockImplementation((_query: unknown, next: SnapshotNext, error: SnapshotError) => {
       snapshotListeners.push({ next, error });
-      return vi.fn();
+      const unsubscribe = vi.fn();
+      proposalUnsubscribes.push(unsubscribe);
+      return unsubscribe;
     });
   });
 
@@ -86,17 +92,21 @@ describe("proposal Firebase runtime adapter", () => {
 
     expect(firestoreMock.writeBatch).toHaveBeenCalledOnce();
     expect(batch.commit).toHaveBeenCalledOnce();
+    expect(firestoreMock.collection).toHaveBeenNthCalledWith(1, db, "scheduleProposals");
+    expect(firestoreMock.collection).toHaveBeenNthCalledWith(2, db, "scheduleProposals");
     expect(firestoreMock.doc).toHaveBeenCalledTimes(2);
     expect(firestoreMock.doc.mock.calls[0][0]).toBe(firestoreMock.doc.mock.calls[1][0]);
     expect(batch.set.mock.calls[0][0]).not.toBe(batch.set.mock.calls[1][0]);
-    expect(batch.set).toHaveBeenCalledWith(firstReference, expect.objectContaining({
-      batchId: "batch-1", ownerUid: "student-1", classId: "grade-1-class-2", status: "pending",
-      reviewedAt: null, reviewedBy: null, rejectionReason: null, publishedEventId: null, createdAt: "server-time",
-    }));
-    expect(batch.set).toHaveBeenCalledWith(secondReference, expect.objectContaining({
-      batchId: "batch-1", ownerUid: "student-1", classId: "grade-1-class-2", status: "pending",
-      reviewedAt: null, reviewedBy: null, rejectionReason: null, publishedEventId: null, createdAt: "server-time",
-    }));
+    expect(batch.set).toHaveBeenNthCalledWith(1, firstReference, {
+      ...draft, ownerUid: "student-1", batchId: "batch-1", classId: "grade-1-class-2",
+      status: "pending", reviewedAt: null, reviewedBy: null, rejectionReason: null,
+      publishedEventId: null, createdAt: "server-time",
+    });
+    expect(batch.set).toHaveBeenNthCalledWith(2, secondReference, {
+      ...draft, title: "Math test", ownerUid: "student-1", batchId: "batch-1", classId: "grade-1-class-2",
+      status: "pending", reviewedAt: null, reviewedBy: null, rejectionReason: null,
+      publishedEventId: null, createdAt: "server-time",
+    });
   });
 
   it("queries only the current anonymous owner's latest fifty proposals", async () => {
@@ -104,6 +114,7 @@ describe("proposal Firebase runtime adapter", () => {
     gateway.subscribeExistingAnonymous(vi.fn(), vi.fn());
     authListener?.(anonymousOne);
 
+    expect(firestoreMock.collection).toHaveBeenCalledWith(db, "scheduleProposals");
     expect(firestoreMock.where).toHaveBeenCalledWith("ownerUid", "==", "student-1");
     expect(firestoreMock.orderBy).toHaveBeenCalledWith("createdAt", "desc");
     expect(firestoreMock.limit).toHaveBeenCalledWith(50);
@@ -115,27 +126,44 @@ describe("proposal Firebase runtime adapter", () => {
     );
   });
 
-  it("unsubscribes the previous proposal query and ignores its late callbacks after an auth switch", async () => {
+  it("unsubscribes and clears state when an anonymous user becomes non-anonymous", async () => {
     const onNext = vi.fn();
     const onError = vi.fn();
-    const firstUnsubscribe = vi.fn();
-    const secondUnsubscribe = vi.fn();
-    firestoreMock.onSnapshot.mockImplementation((_query: unknown, next: SnapshotNext, error: SnapshotError) => {
-      snapshotListeners.push({ next, error });
-      return snapshotListeners.length === 1 ? firstUnsubscribe : secondUnsubscribe;
-    });
+    const gateway = await loadFirebaseProposalHistoryGateway();
+    gateway.subscribeExistingAnonymous(onNext, onError);
+    authListener?.(anonymousOne);
+    const firstListener = snapshotListeners[0];
+    authListener?.({ uid: "google-admin", isAnonymous: false });
+
+    expect(proposalUnsubscribes[0]).toHaveBeenCalledOnce();
+    expect(onNext).toHaveBeenCalledWith([]);
+    expect(firestoreMock.onSnapshot).toHaveBeenCalledOnce();
+    firstListener.next({ docs: [{ id: "stale", data: () => storedProposal() }] });
+    firstListener.error();
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("blocks stale anonymous A callbacks and delivers the current anonymous B callbacks", async () => {
+    const onNext = vi.fn();
+    const onError = vi.fn();
     const gateway = await loadFirebaseProposalHistoryGateway();
     gateway.subscribeExistingAnonymous(onNext, onError);
     authListener?.(anonymousOne);
     const firstListener = snapshotListeners[0];
     authListener?.(anonymousTwo);
+    const secondListener = snapshotListeners[1];
 
-    expect(firstUnsubscribe).toHaveBeenCalledOnce();
+    expect(proposalUnsubscribes[0]).toHaveBeenCalledOnce();
     firstListener.next({ docs: [{ id: "stale", data: () => storedProposal() }] });
     firstListener.error();
     expect(onNext).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
-    expect(secondUnsubscribe).not.toHaveBeenCalled();
+
+    secondListener.next({ docs: [{ id: "current", data: () => storedProposal({ ownerUid: "student-2" }) }] });
+    secondListener.error();
+    expect(onNext).toHaveBeenCalledWith([expect.objectContaining({ id: "current", ownerUid: "student-2" })]);
+    expect(onError).toHaveBeenCalledOnce();
   });
 
   it("ignores late callbacks after cleanup and skips malformed or extra-field documents", async () => {
@@ -153,6 +181,8 @@ describe("proposal Firebase runtime adapter", () => {
     expect(onNext).toHaveBeenCalledWith([expect.objectContaining({ id: "valid" })]);
 
     unsubscribe();
+    expect(authUnsubscribe).toHaveBeenCalledOnce();
+    expect(proposalUnsubscribes[0]).toHaveBeenCalledOnce();
     listener.next({ docs: [{ id: "late", data: () => storedProposal() }] });
     listener.error();
     expect(onNext).toHaveBeenCalledTimes(1);
