@@ -373,6 +373,10 @@ button:disabled {
   gap: 1px;
 }
 
+.calendar-row {
+  display: contents;
+}
+
 .weekday-cell {
   min-height: 36px;
   display: grid;
@@ -510,11 +514,12 @@ button:disabled {
 }
 
 .event-pill .source-badge {
-  max-width: 38px;
-  overflow: hidden;
   padding: 2px 4px;
   font-size: 9px;
-  text-overflow: ellipsis;
+}
+
+.source-label-compact {
+  display: none;
 }
 
 .source-personal {
@@ -881,10 +886,33 @@ button:disabled {
 
   .date-cell {
     height: 96px;
+    padding: 6px 1px;
   }
 
   .event-pill {
+    grid-template-columns: minmax(20px, 1fr) auto;
+    gap: 1px;
+    padding: 3px 1px;
     font-size: 11px;
+  }
+
+  .event-title {
+    min-width: 20px;
+  }
+
+  .event-pill .source-badge {
+    min-width: 10px;
+    justify-content: center;
+    padding: 0;
+    font-size: 8px;
+  }
+
+  .source-label-compact {
+    display: inline;
+  }
+
+  .source-label-full {
+    display: none;
   }
 
   .floating-add-button {

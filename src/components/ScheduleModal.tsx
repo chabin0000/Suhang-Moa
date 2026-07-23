@@ -150,7 +150,11 @@ export default function ScheduleModal({
             />
           </label>
 
-          {errorMessage && <p className="form-error">{errorMessage}</p>}
+          {errorMessage && (
+            <p className="form-error" role="alert">
+              {errorMessage}
+            </p>
+          )}
 
           <footer className="modal-actions">
             <button type="button" className="secondary-button" onClick={onCancel}>

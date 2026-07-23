@@ -10,6 +10,7 @@ import type { PersonalSchedule, SharedEvent } from "../types";
 import { loadSchedules, saveSchedules } from "../utils/storage";
 import CalendarMonth from "./CalendarMonth";
 import ClassDashboard from "./ClassDashboard";
+import ScheduleModal from "./ScheduleModal";
 
 const personalSchedule: PersonalSchedule = {
   source: "personal",
@@ -158,7 +159,8 @@ describe("CalendarMonth interactions", () => {
       name: "2026-07-24 일정 추가",
     });
 
-    expect(eventButton.closest("button")?.contains(dateButton)).toBe(false);
+    expect(eventButton.parentElement?.closest("button")).toBeNull();
+    expect(document.querySelector("button button")).toBeNull();
 
     fireEvent.click(eventButton);
     expect(onSelectItem).toHaveBeenCalledWith(personalSchedule);
@@ -167,6 +169,112 @@ describe("CalendarMonth interactions", () => {
     fireEvent.click(dateButton);
     expect(onSelectDate).toHaveBeenCalledWith("2026-07-24");
     expect(onSelectItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("일정 제목과 좁은 화면용 출처 배지를 함께 렌더링한다", () => {
+    render(
+      <CalendarMonth
+        activeMonth={new Date(2026, 6, 1)}
+        items={[personalSchedule, sharedEvent]}
+        onPrevMonth={vi.fn()}
+        onNextMonth={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSelectItem={vi.fn()}
+      />,
+    );
+
+    const personalButton = screen.getByRole("button", {
+      name: "2026-07-24 개인 물리 보고서 내 일정 열기",
+    });
+    const sharedButton = screen.getByRole("button", {
+      name: "2026-07-24 반 공통 시험 반 일정 열기",
+    });
+
+    expect(within(personalButton).getByText("개인 물리 보고서")).toHaveClass(
+      "event-title",
+    );
+    expect(within(personalButton).getByText("내")).toHaveClass(
+      "source-label-compact",
+    );
+    expect(within(personalButton).getByText("내 일정")).toHaveClass(
+      "source-label-full",
+    );
+    expect(within(sharedButton).getByText("반")).toHaveClass(
+      "source-label-compact",
+    );
+    expect(within(sharedButton).getByText("반 일정")).toHaveClass(
+      "source-label-full",
+    );
+  });
+
+  it("요일 머리글과 6개 주를 각각 일곱 칸의 ARIA 행으로 구성한다", () => {
+    render(
+      <CalendarMonth
+        activeMonth={new Date(2026, 6, 1)}
+        items={[]}
+        onPrevMonth={vi.fn()}
+        onNextMonth={vi.fn()}
+        onSelectDate={vi.fn()}
+        onSelectItem={vi.fn()}
+      />,
+    );
+
+    const rows = within(
+      screen.getByRole("grid", { name: "월간 캘린더" }),
+    ).getAllByRole("row");
+
+    expect(rows).toHaveLength(7);
+    expect(within(rows[0]).getAllByRole("columnheader")).toHaveLength(7);
+    rows.slice(1).forEach((row) => {
+      expect(within(row).getAllByRole("gridcell")).toHaveLength(7);
+    });
+  });
+});
+
+describe("ScheduleModal validation", () => {
+  it("빈 제목은 제출하지 않고 한국어 오류를 표시한다", () => {
+    const onSubmit = vi.fn();
+    render(
+      <ScheduleModal
+        mode="create"
+        defaultDate="2026-07-24"
+        onCancel={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("유형"), {
+      target: { value: "homework" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("제목을 입력해 주세요.");
+  });
+
+  it("불가능한 날짜는 제출하지 않고 한국어 오류를 표시한다", () => {
+    const onSubmit = vi.fn();
+    render(
+      <ScheduleModal
+        mode="create"
+        defaultDate="2026-02-30"
+        onCancel={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("제목"), {
+      target: { value: "날짜 검증 일정" },
+    });
+    fireEvent.change(screen.getByLabelText("유형"), {
+      target: { value: "exam" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "유효한 날짜를 입력해 주세요.",
+    );
   });
 });
 

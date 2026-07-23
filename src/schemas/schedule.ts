@@ -26,7 +26,7 @@ export function isRealIsoDate(value: string): boolean {
 }
 
 export const scheduleDraftSchema = z.object({
-  title: z.string().trim().min(1).max(80),
+  title: z.string().trim().min(1, "제목을 입력해 주세요.").max(80),
   subject: z.string().trim().max(40),
   description: z.string().trim().max(1000),
   type: scheduleTypeSchema,
