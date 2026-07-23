@@ -499,6 +499,79 @@ describe("useSharedSchedules", () => {
 
     expect(gateway.subscribePublished).not.toHaveBeenCalled();
   });
+
+  it("maps an active default gateway loader rejection to network without an unhandled rejection", async () => {
+    let rejectGateway: ((reason?: unknown) => void) | undefined;
+    const loadDefaultGateway = () =>
+      new Promise<SharedScheduleGateway>((_resolve, reject) => {
+        rejectGateway = reject;
+      });
+    const onUnhandledRejection = vi.fn();
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    const useHook = useSharedSchedules as UseSharedSchedulesWithLoader;
+    const { result } = renderHook(() =>
+      useHook(classOne, undefined, loadDefaultGateway),
+    );
+
+    rejectGateway?.(new Error("gateway import failed"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current).toEqual({
+      events: [],
+      loading: false,
+      error: "network",
+    });
+    expect(onUnhandledRejection).not.toHaveBeenCalled();
+    window.removeEventListener("unhandledrejection", onUnhandledRejection);
+  });
+
+  it("ignores an old loader rejection after the class changes", async () => {
+    const deferredLoaders: Array<{
+      resolve: (gateway: SharedScheduleGateway) => void;
+      reject: (reason?: unknown) => void;
+    }> = [];
+    const loadDefaultGateway = () =>
+      new Promise<SharedScheduleGateway>((resolve, reject) => {
+        deferredLoaders.push({ resolve, reject });
+      });
+    const secondEvent = sharedEvent("second", classTwo, "current class event");
+    const currentGateway: SharedScheduleGateway = {
+      subscribePublished: vi.fn((_classId, onNext) => {
+        onNext([secondEvent]);
+        return vi.fn();
+      }),
+    };
+    const useHook = useSharedSchedules as UseSharedSchedulesWithLoader;
+    const { result, rerender } = renderHook(
+      ({ classId }) => useHook(classId, undefined, loadDefaultGateway),
+      { initialProps: { classId: classOne as ClassId | null } },
+    );
+
+    rerender({ classId: classTwo });
+    deferredLoaders[1].resolve(currentGateway);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current).toEqual({
+      events: [secondEvent],
+      loading: false,
+      error: null,
+    });
+
+    deferredLoaders[0].reject(new Error("stale gateway import failed"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current).toEqual({
+      events: [secondEvent],
+      loading: false,
+      error: null,
+    });
+  });
 });
 
 afterEach(() => {
