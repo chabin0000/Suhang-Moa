@@ -91,7 +91,8 @@ const firebaseEnvSchema = z.object({
   VITE_FIREBASE_STORAGE_BUCKET: z.string().trim().min(1),
   VITE_FIREBASE_MESSAGING_SENDER_ID: z.string().trim().min(1),
   VITE_FIREBASE_APP_ID: z.string().trim().min(1),
-  VITE_RECAPTCHA_ENTERPRISE_SITE_KEY: z.string().trim().min(1),
+  // App Check 키는 배포 후 Firebase Console에서 추가할 수 있다.
+  VITE_RECAPTCHA_ENTERPRISE_SITE_KEY: z.string().trim().optional().default(""),
   VITE_USE_FIREBASE_EMULATORS: booleanStringSchema,
   VITE_APPCHECK_DEBUG: booleanStringSchema,
 });
@@ -149,7 +150,10 @@ export function assertFirebaseEnvForCiProduction(
     return;
   }
 
-  const missingKeys = FIREBASE_PUBLIC_ENV_KEYS.filter((key) => {
+  const requiredKeys = FIREBASE_PUBLIC_ENV_KEYS.filter(
+    (key) => key !== "VITE_RECAPTCHA_ENTERPRISE_SITE_KEY",
+  );
+  const missingKeys = requiredKeys.filter((key) => {
     const value = env[key];
     return typeof value !== "string" || value.trim() === "";
   });

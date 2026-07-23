@@ -19,6 +19,10 @@ export function initializeWebAppCheck(
   app: FirebaseApp,
   config: FirebasePublicConfig,
 ): AppCheck | null {
+  if (!config.recaptchaEnterpriseSiteKey) {
+    return null;
+  }
+
   const state = getFirebaseClientState();
   const currentIdentity = createAppCheckIdentity(config);
   const existing = state.appChecks.get(app);
