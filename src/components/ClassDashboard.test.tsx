@@ -37,11 +37,19 @@ const sharedEvent: SharedEvent = {
   status: "published",
 };
 
-function renderDashboard(sharedEvents: SharedEvent[] = [sharedEvent]) {
+function renderDashboard(
+  sharedEvents: SharedEvent[] = [sharedEvent],
+  sharedScheduleError:
+    | "firebase-disabled"
+    | "permission-denied"
+    | "network"
+    | null = null,
+) {
   return render(
     <ClassDashboard
       selectedClass={{ grade: 1, classNo: 2 }}
       sharedEvents={sharedEvents}
+      sharedScheduleError={sharedScheduleError}
       onChangeClass={vi.fn()}
     />,
   );
@@ -78,6 +86,27 @@ describe("ClassDashboard personal CRUD and shared permissions", () => {
     expect(sharedCard.getByText("반 일정")).toBeInTheDocument();
     expect(sharedCard.queryByRole("button", { name: "수정" })).not.toBeInTheDocument();
     expect(sharedCard.queryByRole("button", { name: "삭제" })).not.toBeInTheDocument();
+  });
+
+  it("공유 일정 네트워크 오류를 작게 알리면서 개인 일정 기능은 유지한다", () => {
+    renderDashboard([], "network");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "공유 일정을 불러오지 못했습니다. 네트워크를 확인해 주세요.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "개인 물리 보고서" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "일정 추가" })).toBeEnabled();
+  });
+
+  it.each([
+    ["permission-denied", "공유 일정 열람 권한이 없습니다."],
+    ["firebase-disabled", "공유 일정 연결이 꺼져 있습니다."],
+  ] as const)("%s 상태를 간결한 한국어로 표시한다", (error, message) => {
+    renderDashboard([], error);
+
+    expect(screen.getByText(message)).toBeInTheDocument();
   });
 
   it("개인 일정 생성·수정·삭제를 LocalStorage에 반영하고 공유 원본은 변경하지 않는다", () => {

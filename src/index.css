@@ -301,6 +301,24 @@ button:disabled {
   line-height: 1.05;
 }
 
+.shared-schedule-notice {
+  margin: -8px 0 20px;
+  border-left: 3px solid var(--genesis-warning);
+  background: rgba(245, 158, 11, 0.08);
+  color: #854d0e;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.shared-schedule-notice[data-state="firebase-disabled"],
+.shared-schedule-notice[data-state="loading"] {
+  border-left-color: var(--genesis-neutral);
+  background: rgba(107, 107, 107, 0.07);
+  color: var(--genesis-text-secondary);
+}
+
 .summary-widgets {
   display: grid;
   gap: 12px;
@@ -861,6 +879,7 @@ button:disabled {
   }
 
   .dashboard-header,
+  .shared-schedule-notice,
   .summary-widgets,
   .calendar-section {
     grid-column: 1 / -1;

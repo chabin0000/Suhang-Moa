@@ -1,5 +1,6 @@
 import { CalendarPlus, RefreshCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { SharedScheduleErrorCode } from "../services/sharedScheduleService";
 import type {
   CalendarItem,
   PersonalSchedule,
@@ -19,6 +20,8 @@ import SummaryWidgets from "./SummaryWidgets";
 type ClassDashboardProps = {
   selectedClass: SelectedClass;
   sharedEvents: SharedEvent[];
+  sharedScheduleLoading?: boolean;
+  sharedScheduleError?: SharedScheduleErrorCode | null;
   onChangeClass: () => void;
 };
 
@@ -30,6 +33,8 @@ type ModalState =
 export default function ClassDashboard({
   selectedClass,
   sharedEvents,
+  sharedScheduleLoading = false,
+  sharedScheduleError = null,
   onChangeClass,
 }: ClassDashboardProps) {
   const [personalSchedules, setPersonalSchedules] = useState<PersonalSchedule[]>(
@@ -176,6 +181,27 @@ export default function ClassDashboard({
           반 변경
         </button>
       </header>
+
+      {sharedScheduleError ? (
+        <p
+          className="shared-schedule-notice"
+          data-state={sharedScheduleError}
+          role={sharedScheduleError === "firebase-disabled" ? "status" : "alert"}
+        >
+          {
+            {
+              "firebase-disabled": "공유 일정 연결이 꺼져 있습니다.",
+              "permission-denied": "공유 일정 열람 권한이 없습니다.",
+              network:
+                "공유 일정을 불러오지 못했습니다. 네트워크를 확인해 주세요.",
+            }[sharedScheduleError]
+          }
+        </p>
+      ) : sharedScheduleLoading ? (
+        <p className="shared-schedule-notice" data-state="loading" role="status">
+          반 일정을 불러오는 중입니다.
+        </p>
+      ) : null}
 
       <SummaryWidgets
         counts={summaryCounts}
