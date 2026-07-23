@@ -203,16 +203,6 @@ describe("administrator moderation workspace", () => {
     await waitFor(() => expect(gateway.subscribe).toHaveBeenLastCalledWith(scope, "grade-1-class-2", "schedules", expect.any(Function), expect.any(Function)));
   });
 
-  it("keeps list context, validates drafts, and submits the exact edited schedule command once", async () => {
-    const { commands } = renderWorkspace();
-    await screen.findByRole("button", { name: /초안 제목/ });
-    fireEvent.click(screen.getByRole("button", { name: /초안 제목/ }));
-    const title = screen.getByLabelText("제목");
-    fireEvent.change(title, { target: { value: "수정 제목" } });
-    fireEvent.click(screen.getByRole("button", { name: "확인하고 게시" }));
-    await waitFor(() => expect(commands.approveSchedule).toHaveBeenCalledWith(scope, "teacher", expect.objectContaining({ proposalId: "proposal-1", classId: "grade-1-class-2", title: "수정 제목" })));
-    expect(screen.getByText("초안 제목")).toBeInTheDocument();
-  });
 
   it("shows opinion text as text, requires a rejection reason, and locks duplicate actions", async () => {
     const { commands } = renderWorkspace([opinion]);
@@ -247,5 +237,37 @@ describe("administrator moderation workspace", () => {
     fireEvent.click(screen.getByText("\uCD08\uC548 \uC81C\uBAA9").closest("button")!);
     act(() => emit([]));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Back to queue" })).not.toBeInTheDocument());
+  });
+
+  it("submits every editable schedule field in the exact approval payload", async () => {
+    const { commands } = renderWorkspace();
+    fireEvent.click((await screen.findByText("\uCD08\uC548 \uC81C\uBAA9")).closest("button")!);
+    fireEvent.change(screen.getByLabelText("\uC81C\uBAA9"), { target: { value: "\uC218\uC815 \uC81C\uBAA9" } });
+    fireEvent.click(screen.getByRole("button", { name: "\uD655\uC778\uD558\uACE0 \uAC8C\uC2DC" }));
+    await waitFor(() => expect(commands.approveSchedule).toHaveBeenCalledWith(scope, "teacher", {
+      proposalId: schedule.id, classId: schedule.classId, title: "\uC218\uC815 \uC81C\uBAA9",
+      subject: schedule.subject, type: schedule.type, dueDate: schedule.dueDate, description: schedule.description,
+    }));
+  });
+
+  it("guards each delayed approval command from a double click", async () => {
+    let resolveSchedule!: (value: { status: string }) => void;
+    const scheduleRun = renderWorkspace([schedule], { approveSchedule: vi.fn().mockReturnValue(new Promise<{ status: string }>((resolve) => { resolveSchedule = resolve; })) });
+    fireEvent.click((await screen.findByText("\uCD08\uC548 \uC81C\uBAA9")).closest("button")!);
+    const scheduleApprove = screen.getByRole("button", { name: "\uD655\uC778\uD558\uACE0 \uAC8C\uC2DC" }); fireEvent.click(scheduleApprove); fireEvent.click(scheduleApprove);
+    expect(scheduleRun.commands.approveSchedule).toHaveBeenCalledOnce(); resolveSchedule({ status: "approved" }); cleanup();
+
+    let resolveOpinion!: (value: { status: string }) => void;
+    const opinionRun = renderWorkspace([opinion], { approveOpinion: vi.fn().mockReturnValue(new Promise<{ status: string }>((resolve) => { resolveOpinion = resolve; })) });
+    fireEvent.click((await screen.findByText("\uD559\uC0DD")).closest("button")!);
+    const opinionApprove = screen.getByRole("button", { name: "\uC2B9\uC778" }); fireEvent.click(opinionApprove); fireEvent.click(opinionApprove);
+    expect(opinionRun.commands.approveOpinion).toHaveBeenCalledOnce(); resolveOpinion({ status: "approved" }); cleanup();
+
+    let resolveArchive!: (value: { status: string }) => void;
+    const historySchedule = { ...schedule, status: "approved" as const, publishedEventId: "event-1" };
+    const archiveRun = renderWorkspace([historySchedule], { archiveEvent: vi.fn().mockReturnValue(new Promise<{ status: string }>((resolve) => { resolveArchive = resolve; })) });
+    fireEvent.click(screen.getAllByRole("tab")[2]); fireEvent.click((await screen.findByText("\uCD08\uC548 \uC81C\uBAA9")).closest("button")!);
+    const archive = screen.getAllByRole("button").find((button) => button.querySelector(".lucide-archive"))!; fireEvent.click(archive); fireEvent.click(archive);
+    expect(archiveRun.commands.archiveEvent).toHaveBeenCalledOnce(); resolveArchive({ status: "archived" });
   });
 });
