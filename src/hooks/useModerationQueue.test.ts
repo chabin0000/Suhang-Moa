@@ -9,7 +9,7 @@ const scope: AdminScope = { role: "class_admin", classIds: [classId] };
 describe("useModerationQueue", () => {
   it("rejects an out-of-scope class before it subscribes", () => {
     const gateway: ModerationQueueGateway = { subscribe: vi.fn() };
-    const { result } = renderHook(() => useModerationQueue(scope, "grade-1-class-3" as ClassId, "pending", gateway));
+    const { result } = renderHook(() => useModerationQueue(scope, "grade-1-class-3" as ClassId, "schedules", gateway));
     expect(result.current).toMatchObject({ loading: false, error: "unauthorized", rows: [] });
     expect(gateway.subscribe).not.toHaveBeenCalled();
   });
@@ -26,7 +26,7 @@ describe("useModerationQueue", () => {
       }),
     };
     const { result, rerender } = renderHook(
-      ({ selectedClassId }) => useModerationQueue(scope, selectedClassId, "pending", gateway),
+      ({ selectedClassId }) => useModerationQueue(scope, selectedClassId, "schedules", gateway),
       { initialProps: { selectedClassId: classId as ClassId | null } },
     );
     rerender({ selectedClassId: null });
@@ -39,7 +39,7 @@ describe("useModerationQueue", () => {
     const failingLoader = async () => {
       throw new Error("offline");
     };
-    const { result } = renderHook(() => useModerationQueue(scope, classId, "pending", undefined, failingLoader));
+    const { result } = renderHook(() => useModerationQueue(scope, classId, "schedules", undefined, failingLoader));
     await vi.waitFor(() => expect(result.current).toMatchObject({ loading: false, error: "retryable" }));
   });
 });

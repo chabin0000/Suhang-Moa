@@ -25,7 +25,9 @@ import {
   type RejectProposalInput,
 } from "../schemas/moderation";
 import { storedOpinionProposalSchema } from "../schemas/opinion";
+import type { OpinionProposal } from "../schemas/opinion";
 import { storedProposalSchema } from "../schemas/proposal";
+import type { ScheduleProposal } from "../schemas/proposal";
 import type { AdminScope, ClassId } from "../types";
 import { isClassId } from "../utils/classId";
 
@@ -74,17 +76,15 @@ export class ModerationError extends Error {
   }
 }
 
-export type ModerationQueueTab = "pending" | "history";
+export type ModerationQueueTab = "schedules" | "opinions" | "history";
 export type ModerationQueueErrorCode = "permission-denied" | "network" | "retryable" | "unauthorized";
-export type ModerationQueueRow = {
-  id: string;
-  kind: "schedule" | "opinion";
-  classId: ClassId;
-  status: "pending" | "approved" | "rejected";
-  createdAt: Date | null;
-  reviewedAt: Date | null;
-  [key: string]: unknown;
+export type ModerationScheduleQueueRow = ScheduleProposal & {
+  kind: "schedule";
 };
+export type ModerationOpinionQueueRow = OpinionProposal & {
+  kind: "opinion";
+};
+export type ModerationQueueRow = ModerationScheduleQueueRow | ModerationOpinionQueueRow;
 
 export interface ModerationQueueGateway {
   subscribe(
@@ -177,6 +177,14 @@ function mapFirestoreError(error: unknown): ModerationError {
   return new ModerationError("network");
 }
 
+function createReference<T>(factory: () => T): T {
+  try {
+    return factory();
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
+}
+
 function alreadyProcessed(status: string, publicId: string | null): ModerationResult | null {
   return status === "pending" ? null : {
     status: "already-processed",
@@ -193,9 +201,9 @@ export async function approveSchedule(
   requireScope(scope, command.classId as ClassId);
   if (!adminUid.trim()) throw new ModerationError("validation");
   const db = requireDb();
-  const proposalReference = doc(db, "scheduleProposals", command.proposalId);
+  const proposalReference = createReference(() => doc(db, "scheduleProposals", command.proposalId));
   // SDK가 callback을 재실행해도 공개 이벤트 ID는 반드시 하나여야 한다.
-  const eventReference = doc(collection(db, "classes", command.classId, "events"));
+  const eventReference = createReference(() => doc(collection(db, "classes", command.classId, "events")));
 
   try {
     return await runTransaction(db, async (transaction) => {
@@ -240,7 +248,7 @@ export async function rejectSchedule(
   requireScope(scope, command.classId as ClassId);
   if (!adminUid.trim()) throw new ModerationError("validation");
   const db = requireDb();
-  const proposalReference = doc(db, "scheduleProposals", command.proposalId);
+  const proposalReference = createReference(() => doc(db, "scheduleProposals", command.proposalId));
   try {
     return await runTransaction(db, async (transaction) => {
       const proposal = parseStored(storedProposalSchema, await transaction.get(proposalReference));
@@ -267,9 +275,9 @@ export async function approveOpinion(
   requireScope(scope, command.classId as ClassId);
   if (!adminUid.trim()) throw new ModerationError("validation");
   const db = requireDb();
-  const proposalReference = doc(db, "opinionProposals", command.proposalId);
-  const parentReference = doc(db, "classes", command.classId, "events", command.eventId);
-  const opinionReference = doc(collection(db, "classes", command.classId, "events", command.eventId, "opinions"));
+  const proposalReference = createReference(() => doc(db, "opinionProposals", command.proposalId));
+  const parentReference = createReference(() => doc(db, "classes", command.classId, "events", command.eventId));
+  const opinionReference = createReference(() => doc(collection(db, "classes", command.classId, "events", command.eventId, "opinions")));
   try {
     return await runTransaction(db, async (transaction) => {
       const proposal = parseStored(storedOpinionProposalSchema, await transaction.get(proposalReference));
@@ -306,7 +314,7 @@ export async function archiveEvent(
   requireScope(scope, command.classId as ClassId);
   if (!adminUid.trim()) throw new ModerationError("validation");
   const db = requireDb();
-  const eventReference = doc(db, "classes", command.classId, "events", command.eventId);
+  const eventReference = createReference(() => doc(db, "classes", command.classId, "events", command.eventId));
   try {
     return await runTransaction(db, async (transaction) => {
       const event = await transaction.get(eventReference);
@@ -331,7 +339,7 @@ export async function rejectOpinion(
   requireScope(scope, command.classId as ClassId);
   if (!adminUid.trim()) throw new ModerationError("validation");
   const db = requireDb();
-  const proposalReference = doc(db, "opinionProposals", command.proposalId);
+  const proposalReference = createReference(() => doc(db, "opinionProposals", command.proposalId));
   try {
     return await runTransaction(db, async (transaction) => {
       const proposal = parseStored(storedOpinionProposalSchema, await transaction.get(proposalReference));
@@ -355,17 +363,29 @@ function queueErrorCode(error: unknown): ModerationQueueErrorCode {
 }
 
 function queueRows(
-  kind: ModerationQueueRow["kind"],
+  kind: "schedule" | "opinion",
   snapshot: { docs: Array<{ id: string; data(): unknown }> },
 ): ModerationQueueRow[] {
-  const schema = kind === "schedule" ? moderationScheduleQueueRowSchema : moderationOpinionQueueRowSchema;
-  const rows: ModerationQueueRow[] = [];
-  for (const documentSnapshot of snapshot.docs) {
-    const parsed = schema.safeParse(documentSnapshot.data());
-    if (!parsed.success) continue;
-    rows.push({ id: documentSnapshot.id, kind, ...parsed.data, classId: parsed.data.classId as ClassId });
+  if (kind === "schedule") {
+    return snapshot.docs.flatMap((documentSnapshot) => {
+      const parsed = moderationScheduleQueueRowSchema.safeParse(documentSnapshot.data());
+      return parsed.success ? [{ id: documentSnapshot.id, kind, ...parsed.data, classId: parsed.data.classId as ClassId }] : [];
+    });
   }
-  return rows;
+  return snapshot.docs.flatMap((documentSnapshot) => {
+    const parsed = moderationOpinionQueueRowSchema.safeParse(documentSnapshot.data());
+    return parsed.success ? [{ id: documentSnapshot.id, kind, ...parsed.data, classId: parsed.data.classId as ClassId }] : [];
+  });
+}
+
+function compareHistoryRows(left: ModerationQueueRow, right: ModerationQueueRow): number {
+  const leftTime = left.reviewedAt?.getTime();
+  const rightTime = right.reviewedAt?.getTime();
+  if (leftTime !== undefined && rightTime !== undefined && leftTime !== rightTime) return rightTime - leftTime;
+  if (leftTime !== undefined && rightTime === undefined) return -1;
+  if (leftTime === undefined && rightTime !== undefined) return 1;
+  if (left.kind !== right.kind) return left.kind === "schedule" ? -1 : 1;
+  return left.id.localeCompare(right.id);
 }
 
 function isSelectedClassAllowed(scope: AdminScope, selectedClassId: ClassId | null): boolean {
@@ -386,38 +406,43 @@ export const firebaseModerationQueueGateway: ModerationQueueGateway = {
       onError(queueErrorCode(error));
       return () => {};
     }
-    const statusConstraint = tab === "pending"
-      ? where("status", "==", "pending")
-      : where("status", "in", ["approved", "rejected"]);
-    const classConstraint = selectedClassId ? where("classId", "==", selectedClassId) : null;
-    const orderConstraint = orderBy(tab === "pending" ? "createdAt" : "reviewedAt", "asc");
     let active = true;
-    const latest = new Map<ModerationQueueRow["kind"], ModerationQueueRow[]>();
-    const emit = () => {
-      if (!active) return;
-      onNext([...latest.values()].flat().sort((a, b) => a.id.localeCompare(b.id)));
-    };
-    const subscribeCollection = (kind: ModerationQueueRow["kind"], path: string) => {
-      const constraints = classConstraint ? [classConstraint, statusConstraint, orderConstraint] : [statusConstraint, orderConstraint];
-      const sourceQuery = query(collection(db, path), ...constraints);
-      return onSnapshot(sourceQuery, (snapshot) => {
-        if (!active) return;
-        latest.set(kind, queueRows(kind, snapshot));
-        emit();
-      }, (error) => {
-        if (active) onError(queueErrorCode(error));
-      });
-    };
+    const unsubscribes: Array<() => void> = [];
     try {
-      const unsubscribeSchedules = subscribeCollection("schedule", "scheduleProposals");
-      const unsubscribeOpinions = subscribeCollection("opinion", "opinionProposals");
+      const statusConstraint = tab === "history"
+        ? where("status", "in", ["approved", "rejected"])
+        : where("status", "==", "pending");
+      const classConstraint = selectedClassId ? where("classId", "==", selectedClassId) : null;
+      const orderConstraint = orderBy(tab === "history" ? "reviewedAt" : "createdAt", tab === "history" ? "desc" : "asc");
+      const sources: Array<["schedule" | "opinion", string]> = tab === "schedules"
+        ? [["schedule", "scheduleProposals"]]
+        : tab === "opinions"
+          ? [["opinion", "opinionProposals"]]
+          : [["schedule", "scheduleProposals"], ["opinion", "opinionProposals"]];
+      const latest = new Map<"schedule" | "opinion", ModerationQueueRow[]>();
+      const emit = () => {
+        if (!active) return;
+        const rows = [...latest.values()].flat();
+        onNext(tab === "history" ? rows.sort(compareHistoryRows) : rows);
+      };
+      for (const [kind, path] of sources) {
+        const constraints = classConstraint ? [classConstraint, statusConstraint, orderConstraint] : [statusConstraint, orderConstraint];
+        const sourceQuery = query(collection(db, path), ...constraints);
+        unsubscribes.push(onSnapshot(sourceQuery, (snapshot) => {
+          if (!active) return;
+          latest.set(kind, queueRows(kind, snapshot));
+          emit();
+        }, (error) => {
+          if (active) onError(queueErrorCode(error));
+        }));
+      }
       return () => {
         active = false;
-        unsubscribeSchedules();
-        unsubscribeOpinions();
+        unsubscribes.forEach((unsubscribe) => unsubscribe());
       };
     } catch (error) {
       active = false;
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
       onError(queueErrorCode(error));
       return () => {};
     }

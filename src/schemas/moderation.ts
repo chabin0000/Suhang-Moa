@@ -5,7 +5,9 @@ import type { ClassId, ScheduleDraft } from "../types";
 import { storedOpinionProposalSchema } from "./opinion";
 import { storedProposalSchema } from "./proposal";
 
-const documentIdSchema = z.string().trim().min(1).max(150);
+const documentIdSchema = z.string().min(1).max(150).refine(
+  (value) => value === value.trim() && value !== "." && value !== ".." && !value.includes("/"),
+);
 const classIdSchema = z.string().refine(isClassId);
 
 export interface PublishScheduleInput extends ScheduleDraft {

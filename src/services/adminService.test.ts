@@ -158,19 +158,44 @@ describe("adminService", () => {
     expect(transaction.set).not.toHaveBeenCalled();
   });
 
-  it("approves an opinion from the stored proposal only after rereading its published parent", async () => {
+  it("approves an opinion from the stored proposal byte-for-byte after rereading its published parent", async () => {
     const transaction = { get: vi.fn(async (reference: any) => reference.segments?.[0] === "opinionProposals"
-      ? documentSnapshot(storedOpinionProposal()) : documentSnapshot({ status: "published" })), set: vi.fn(), update: vi.fn() };
+      ? documentSnapshot(storedOpinionProposal({ nickname: "  학생  ", content: "  원문 의견  " })) : documentSnapshot({ status: "published" })), set: vi.fn(), update: vi.fn() };
     firestoreMock.runTransaction.mockImplementation((_db: unknown, callback: (tx: any) => Promise<unknown>) => callback(transaction));
     firestoreMock.doc.mockImplementation((first: any, ...segments: string[]) => "segments" in first
       ? { id: "opinion-fixed", kind: "public", parent: first } : { kind: "doc", segments });
     await expect(approveOpinion(classAdmin, "teacher-1", { proposalId: "opinion-1", classId, eventId: "event-1" }))
       .resolves.toEqual({ status: "approved", publicId: "opinion-fixed" });
     expect(transaction.set).toHaveBeenCalledWith(expect.objectContaining({ id: "opinion-fixed" }), {
-      nickname: "학생", content: "원래 의견", sourceProposalId: "opinion-1", status: "published", approvedBy: "teacher-1", approvedAt: "SERVER_TIME",
+      nickname: "  학생  ", content: "  원문 의견  ", sourceProposalId: "opinion-1", status: "published", approvedBy: "teacher-1", approvedAt: "SERVER_TIME",
     });
     expect(transaction.update).toHaveBeenCalledWith({ kind: "doc", segments: ["opinionProposals", "opinion-1"] }, expect.objectContaining({ publishedOpinionId: "opinion-fixed" }));
     expect(transaction.get).toHaveBeenCalledWith({ kind: "doc", segments: ["classes", classId, "events", "event-1"] });
+  });
+
+  it("reuses the same nested opinion reference through a retry and does not rewrite an approved opinion", async () => {
+    const references: unknown[] = [];
+    firestoreMock.doc.mockImplementation((first: any, ...segments: string[]) => "segments" in first
+      ? { id: "opinion-fixed", kind: "public", parent: first } : { kind: "doc", segments });
+    firestoreMock.runTransaction.mockImplementation(async (_db: unknown, callback: (tx: any) => Promise<unknown>) => {
+      for (let index = 0; index < 2; index += 1) {
+        const transaction = { get: vi.fn(async (reference: any) => reference.segments?.[0] === "opinionProposals"
+          ? documentSnapshot(storedOpinionProposal()) : documentSnapshot({ status: "published" })), set: vi.fn((reference) => references.push(reference)), update: vi.fn() };
+        await callback(transaction);
+      }
+      return { status: "approved", publicId: "opinion-fixed" };
+    });
+    await approveOpinion(classAdmin, "teacher-1", { proposalId: "opinion-1", classId, eventId: "event-1" });
+    expect(firestoreMock.collection).toHaveBeenCalledWith(db, "classes", classId, "events", "event-1", "opinions");
+    expect(references).toHaveLength(2);
+    expect(references[0]).toBe(references[1]);
+
+    const processed = { get: vi.fn(async () => documentSnapshot(storedOpinionProposal({ status: "approved", publishedOpinionId: "opinion-fixed" }))), set: vi.fn(), update: vi.fn() };
+    firestoreMock.runTransaction.mockImplementation((_db: unknown, callback: (tx: any) => Promise<unknown>) => callback(processed));
+    await expect(approveOpinion(classAdmin, "teacher-1", { proposalId: "opinion-1", classId, eventId: "event-1" }))
+      .resolves.toEqual({ status: "already-processed", publicId: "opinion-fixed" });
+    expect(processed.set).not.toHaveBeenCalled();
+    expect(processed.update).not.toHaveBeenCalled();
   });
 
   it("rejects parent-unavailable opinions without public writes", async () => {
@@ -206,21 +231,35 @@ describe("adminService", () => {
     expect(transaction.update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "rejected", rejectionReason: "부적절한 표현" }));
   });
 
-  it("uses rules-compatible scoped queue queries without loading every class", () => {
+  it("subscribes only schedule proposals for the schedule pending tab", () => {
     const unsubscribe = vi.fn();
     firestoreMock.where.mockImplementation((...args: unknown[]) => ({ where: args }));
     firestoreMock.orderBy.mockImplementation((...args: unknown[]) => ({ orderBy: args }));
     firestoreMock.query.mockImplementation((...args: unknown[]) => ({ query: args }));
     firestoreMock.onSnapshot.mockImplementation((_query: unknown, _next: unknown, _error: unknown) => unsubscribe);
-    firebaseModerationQueueGateway.subscribe(classAdmin, classId, "pending", vi.fn(), vi.fn());
+    firebaseModerationQueueGateway.subscribe(classAdmin, classId, "schedules", vi.fn(), vi.fn());
     expect(firestoreMock.collection).toHaveBeenCalledWith(db, "scheduleProposals");
     expect(firestoreMock.where).toHaveBeenCalledWith("classId", "==", classId);
     expect(firestoreMock.where).toHaveBeenCalledWith("status", "==", "pending");
     expect(firestoreMock.orderBy).toHaveBeenCalledWith("createdAt", "asc");
     expect(firestoreMock.query.mock.calls[0][1]).toEqual({ where: ["classId", "==", classId] });
+    expect(firestoreMock.collection).not.toHaveBeenCalledWith(db, "opinionProposals");
+    expect(firestoreMock.onSnapshot).toHaveBeenCalledOnce();
   });
 
-  it("skips malformed queue rows and lets a super admin query all valid classes without a class filter", () => {
+  it("subscribes only opinion proposals for the opinion pending tab", () => {
+    firestoreMock.where.mockImplementation((...args: unknown[]) => ({ where: args }));
+    firestoreMock.orderBy.mockImplementation((...args: unknown[]) => ({ orderBy: args }));
+    firestoreMock.query.mockImplementation((...args: unknown[]) => ({ query: args }));
+    firestoreMock.onSnapshot.mockReturnValue(vi.fn());
+    firebaseModerationQueueGateway.subscribe(classAdmin, classId, "opinions", vi.fn(), vi.fn());
+    expect(firestoreMock.collection).toHaveBeenCalledWith(db, "opinionProposals");
+    expect(firestoreMock.collection).not.toHaveBeenCalledWith(db, "scheduleProposals");
+    expect(firestoreMock.orderBy).toHaveBeenCalledWith("createdAt", "asc");
+    expect(firestoreMock.onSnapshot).toHaveBeenCalledOnce();
+  });
+
+  it("uses reviewedAt descending history queries, skips malformed rows, and merges ties deterministically", () => {
     const listeners: Array<(snapshot: { docs: Array<{ id: string; data: () => unknown }> }) => void> = [];
     firestoreMock.where.mockImplementation((...args: unknown[]) => ({ where: args }));
     firestoreMock.orderBy.mockImplementation((...args: unknown[]) => ({ orderBy: args }));
@@ -230,13 +269,51 @@ describe("adminService", () => {
       return vi.fn();
     });
     const onNext = vi.fn();
-    firebaseModerationQueueGateway.subscribe(superAdmin, null, "pending", onNext, vi.fn());
+    firebaseModerationQueueGateway.subscribe(superAdmin, null, "history", onNext, vi.fn());
     listeners[0]({ docs: [
-      { id: "valid", data: () => storedScheduleProposal() },
-      { id: "bad", data: () => ({ classId, status: "pending" }) },
+      { id: "schedule-z", data: () => storedScheduleProposal({ status: "approved", reviewedAt: { toDate: () => new Date("2026-07-22T00:00:00.000Z") } }) },
+      { id: "bad", data: () => ({ classId, status: "approved" }) },
     ] });
-    expect(onNext).toHaveBeenLastCalledWith([expect.objectContaining({ id: "valid", kind: "schedule" })]);
+    listeners[1]({ docs: [
+      { id: "opinion-a", data: () => storedOpinionProposal({ status: "rejected", reviewedAt: { toDate: () => new Date("2026-07-22T00:00:00.000Z") } }) },
+    ] });
+    expect(onNext).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: "schedule-z", kind: "schedule" }),
+      expect.objectContaining({ id: "opinion-a", kind: "opinion" }),
+    ]);
     expect(firestoreMock.where).not.toHaveBeenCalledWith("classId", "==", expect.anything());
+    expect(firestoreMock.where).toHaveBeenCalledWith("status", "in", ["approved", "rejected"]);
+    expect(firestoreMock.orderBy).toHaveBeenCalledWith("reviewedAt", "desc");
+    expect(firestoreMock.onSnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("puts null reviewed times last and releases an already-open listener after partial history setup failure", () => {
+    const listeners: Array<(snapshot: { docs: Array<{ id: string; data: () => unknown }> }) => void> = [];
+    const scheduleUnsubscribe = vi.fn();
+    firestoreMock.where.mockImplementation((...args: unknown[]) => ({ where: args }));
+    firestoreMock.orderBy.mockImplementation((...args: unknown[]) => ({ orderBy: args }));
+    firestoreMock.query.mockImplementation((...args: unknown[]) => ({ query: args }));
+    firestoreMock.onSnapshot.mockImplementationOnce((_query: unknown, next: (snapshot: any) => void) => {
+      listeners.push(next);
+      return scheduleUnsubscribe;
+    }).mockImplementationOnce(() => { throw new Error("second listener failed"); });
+    const onError = vi.fn();
+    firebaseModerationQueueGateway.subscribe(superAdmin, null, "history", vi.fn(), onError);
+    expect(scheduleUnsubscribe).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledWith("network");
+
+    firestoreMock.onSnapshot.mockImplementation((_query: unknown, next: (snapshot: any) => void) => {
+      listeners.push(next);
+      return vi.fn();
+    });
+    const onNext = vi.fn();
+    firebaseModerationQueueGateway.subscribe(superAdmin, null, "history", onNext, vi.fn());
+    listeners[1]({ docs: [{ id: "no-review", data: () => storedScheduleProposal({ status: "approved", reviewedAt: null }) }] });
+    listeners[2]({ docs: [{ id: "reviewed", data: () => storedOpinionProposal({ status: "approved", reviewedAt: { toDate: () => new Date("2026-07-23T00:00:00.000Z") } }) }] });
+    expect(onNext).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: "reviewed" }),
+      expect.objectContaining({ id: "no-review" }),
+    ]);
   });
 
   it("blocks invalid or out-of-scope commands before any Firebase access", async () => {
@@ -245,6 +322,14 @@ describe("adminService", () => {
     expect(firebaseAppMock.getFirestoreDb).not.toHaveBeenCalled();
     expect(firestoreMock.doc).not.toHaveBeenCalled();
     expect(firestoreMock.runTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects Firestore path separators before Firebase access and maps document construction errors safely", async () => {
+    await expect(approveSchedule(superAdmin, "teacher-1", { ...editedSchedule, proposalId: "bad/path" }))
+      .rejects.toEqual(new ModerationError("validation"));
+    expect(firebaseAppMock.getFirestoreDb).not.toHaveBeenCalled();
+    firestoreMock.doc.mockImplementation(() => { throw new Error("raw sdk path failure"); });
+    await expect(approveSchedule(superAdmin, "teacher-1", editedSchedule)).rejects.toEqual(new ModerationError("network"));
   });
 
   it("maps raw Firestore permission, network, and aborted errors to safe typed errors", async () => {
