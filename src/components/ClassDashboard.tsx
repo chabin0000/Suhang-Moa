@@ -83,6 +83,7 @@ export default function ClassDashboard({
   function handleSaveSchedule(draft: ScheduleDraft) {
     const nextSchedule: Schedule = {
       ...draft,
+      source: "personal",
       id: createScheduleId(),
       grade: selectedClass.grade,
       classNo: selectedClass.classNo,

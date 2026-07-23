@@ -8,12 +8,15 @@ export const SCHEDULE_TYPES = [
 
 export type ScheduleType = (typeof SCHEDULE_TYPES)[number];
 
+export type ClassId = `grade-${1 | 2 | 3}-class-${number}`;
+
 export type SelectedClass = {
   grade: number;
   classNo: number;
 };
 
-export type Schedule = {
+export interface PersonalSchedule {
+  source: "personal";
   id: string;
   grade: number;
   classNo: number;
@@ -23,15 +26,45 @@ export type Schedule = {
   type: ScheduleType;
   dueDate: string;
   createdAt: string;
-};
+  updatedAt?: string;
+}
 
-export type ScheduleDraft = {
+export interface SharedEvent {
+  source: "shared";
+  id: string;
+  classId: ClassId;
+  title: string;
+  subject?: string;
+  description?: string;
+  type: ScheduleType;
+  dueDate: string;
+  status: "published";
+}
+
+export type CalendarItem = PersonalSchedule | SharedEvent;
+
+// Task 3에서 화면 컴포넌트를 PersonalSchedule로 직접 전환할 때 제거한다.
+export type Schedule = PersonalSchedule;
+
+export interface ScheduleDraft {
   title: string;
   subject: string;
   description: string;
   type: ScheduleType;
   dueDate: string;
-};
+}
+
+export interface ProposalDraft extends ScheduleDraft {
+  nickname: string;
+}
+
+export type ProposalStatus = "pending" | "approved" | "rejected";
+export type ModerationRole = "super_admin" | "class_admin";
+
+export interface AdminScope {
+  role: ModerationRole;
+  classIds: ClassId[];
+}
 
 export type SummaryFilter = "today" | "tomorrow" | "week" | null;
 
