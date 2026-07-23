@@ -367,6 +367,8 @@ button:disabled {
 }
 
 .calendar-grid {
+  container-type: inline-size;
+  container-name: calendar;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   background: var(--genesis-border);
@@ -869,7 +871,7 @@ button:disabled {
   }
 }
 
-@media (max-width: 640px) {
+@container calendar (max-width: 700px) {
   .date-cell {
     height: 96px;
     padding: 6px 1px;
