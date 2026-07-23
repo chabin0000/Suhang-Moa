@@ -1,8 +1,260 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isGoogleUser() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == "google.com"
+        && request.auth.token.email_verified == true;
+    }
+
+    function isAnonymousStudent() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == "anonymous";
+    }
+
+    function isSuperAdmin() {
+      return isGoogleUser()
+        && request.auth.token.email == "chabin0960@gmail.com";
+    }
+
+    function adminPath() {
+      return /databases/$(database)/documents/admins/$(request.auth.uid);
+    }
+
+    function isClassAdmin(classId) {
+      return isGoogleUser()
+        && exists(adminPath())
+        && get(adminPath()).data.active == true
+        && get(adminPath()).data.role == "class_admin"
+        && classId in get(adminPath()).data.classIds;
+    }
+
+    function canModerate(classId) {
+      return isSuperAdmin() || isClassAdmin(classId);
+    }
+
+    function boundedList() {
+      return request.query.limit != null && request.query.limit <= 50;
+    }
+
+    function isClassId(value) {
+      return value is string
+        && value.matches('^grade-[123]-class-([1-9]|1[0-2])$');
+    }
+
+    function isDate(value) {
+      return value is string
+        && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isNonBlank(value, max) {
+      return value is string && value.size() > 0 && value.size() <= max
+        && value.trim().size() > 0;
+    }
+
+    function isText(value, max) {
+      return value is string && value.size() <= max;
+    }
+
+    function isScheduleType(value) {
+      return value in ["performance", "exam", "homework", "material", "etc"];
+    }
+
+    function hasExactKeys(data, keys) {
+      return data.keys().hasAll(keys) && data.keys().hasOnly(keys);
+    }
+
+    function validPendingSchedule(data) {
+      return hasExactKeys(data, [
+        "batchId", "ownerUid", "classId", "nickname", "title", "subject", "description",
+        "type", "dueDate", "status", "createdAt", "reviewedAt", "reviewedBy",
+        "rejectionReason", "publishedEventId"
+      ])
+        && isNonBlank(data.batchId, 150)
+        && isNonBlank(data.ownerUid, 150)
+        && isClassId(data.classId)
+        && isNonBlank(data.nickname, 20)
+        && isNonBlank(data.title, 80)
+        && isText(data.subject, 40)
+        && isText(data.description, 1000)
+        && isScheduleType(data.type)
+        && isDate(data.dueDate)
+        && data.status == "pending"
+        && data.createdAt == request.time
+        && data.reviewedAt == null && data.reviewedBy == null
+        && data.rejectionReason == null && data.publishedEventId == null;
+    }
+
+    function validPendingOpinion(data) {
+      return hasExactKeys(data, [
+        "classId", "eventId", "ownerUid", "nickname", "content", "status", "createdAt",
+        "reviewedAt", "reviewedBy", "rejectionReason", "publishedOpinionId"
+      ])
+        && isClassId(data.classId)
+        && isNonBlank(data.eventId, 150)
+        && isNonBlank(data.ownerUid, 150)
+        && isNonBlank(data.nickname, 20)
+        && isNonBlank(data.content, 500)
+        && data.status == "pending" && data.createdAt == request.time
+        && data.reviewedAt == null && data.reviewedBy == null
+        && data.rejectionReason == null && data.publishedOpinionId == null;
+    }
+
+    function eventPath(classId, eventId) {
+      return /databases/$(database)/documents/classes/$(classId)/events/$(eventId);
+    }
+
+    function scheduleProposalPath(proposalId) {
+      return /databases/$(database)/documents/scheduleProposals/$(proposalId);
+    }
+
+    function opinionProposalPath(proposalId) {
+      return /databases/$(database)/documents/opinionProposals/$(proposalId);
+    }
+
+    function opinionPath(classId, eventId, opinionId) {
+      return /databases/$(database)/documents/classes/$(classId)/events/$(eventId)/opinions/$(opinionId);
+    }
+
+    function validEventCreate(data, classId, eventId) {
+      return hasExactKeys(data, [
+        "classId", "title", "subject", "description", "type", "dueDate", "source",
+        "sourceProposalId", "status", "approvedBy", "createdAt", "updatedAt"
+      ])
+        && data.classId == classId && isClassId(data.classId)
+        && isNonBlank(data.title, 80) && isText(data.subject, 40)
+        && isText(data.description, 1000) && isScheduleType(data.type) && isDate(data.dueDate)
+        && data.status == "published" && data.approvedBy == request.auth.uid
+        && data.createdAt == request.time && data.updatedAt == request.time
+        && ((data.source == "admin" && data.sourceProposalId == null)
+          || (data.source == "approved-proposal" && isNonBlank(data.sourceProposalId, 150)
+            && existsAfter(scheduleProposalPath(data.sourceProposalId))
+            && getAfter(scheduleProposalPath(data.sourceProposalId)).data.classId == classId
+            && getAfter(scheduleProposalPath(data.sourceProposalId)).data.status == "approved"
+            && getAfter(scheduleProposalPath(data.sourceProposalId)).data.publishedEventId == eventId
+            && getAfter(scheduleProposalPath(data.sourceProposalId)).data.reviewedBy == request.auth.uid));
+    }
+
+    function validScheduleReview(proposalId) {
+      return resource.data.status == "pending"
+        && canModerate(resource.data.classId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status", "reviewedAt", "reviewedBy", "rejectionReason", "publishedEventId"
+        ])
+        && request.resource.data.reviewedAt == request.time
+        && request.resource.data.reviewedBy == request.auth.uid
+        && ((request.resource.data.status == "rejected"
+          && isNonBlank(request.resource.data.rejectionReason, 300)
+          && request.resource.data.publishedEventId == null)
+          || (request.resource.data.status == "approved"
+            && request.resource.data.rejectionReason == null
+            && isNonBlank(request.resource.data.publishedEventId, 150)
+            && existsAfter(eventPath(resource.data.classId, request.resource.data.publishedEventId))
+            && getAfter(eventPath(resource.data.classId, request.resource.data.publishedEventId)).data.source == "approved-proposal"
+            && getAfter(eventPath(resource.data.classId, request.resource.data.publishedEventId)).data.sourceProposalId == proposalId
+            && getAfter(eventPath(resource.data.classId, request.resource.data.publishedEventId)).data.approvedBy == request.auth.uid));
+    }
+
+    function validOpinionCreate(data, classId, eventId, opinionId) {
+      return hasExactKeys(data, ["nickname", "content", "sourceProposalId", "status", "approvedBy", "approvedAt"])
+        && isNonBlank(data.nickname, 20) && isNonBlank(data.content, 500)
+        && isNonBlank(data.sourceProposalId, 150) && data.status == "published"
+        && data.approvedBy == request.auth.uid && data.approvedAt == request.time
+        && existsAfter(opinionProposalPath(data.sourceProposalId))
+        && getAfter(opinionProposalPath(data.sourceProposalId)).data.classId == classId
+        && getAfter(opinionProposalPath(data.sourceProposalId)).data.eventId == eventId
+        && getAfter(opinionProposalPath(data.sourceProposalId)).data.status == "approved"
+        && getAfter(opinionProposalPath(data.sourceProposalId)).data.publishedOpinionId == opinionId
+        && getAfter(opinionProposalPath(data.sourceProposalId)).data.reviewedBy == request.auth.uid
+        && getAfter(opinionProposalPath(data.sourceProposalId)).data.nickname == data.nickname
+        && getAfter(opinionProposalPath(data.sourceProposalId)).data.content == data.content;
+    }
+
+    function validOpinionReview(proposalId) {
+      return resource.data.status == "pending"
+        && canModerate(resource.data.classId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status", "reviewedAt", "reviewedBy", "rejectionReason", "publishedOpinionId"
+        ])
+        && request.resource.data.reviewedAt == request.time
+        && request.resource.data.reviewedBy == request.auth.uid
+        && ((request.resource.data.status == "rejected"
+          && isNonBlank(request.resource.data.rejectionReason, 300)
+          && request.resource.data.publishedOpinionId == null)
+          || (request.resource.data.status == "approved"
+            && request.resource.data.rejectionReason == null
+            && isNonBlank(request.resource.data.publishedOpinionId, 150)
+            && existsAfter(opinionPath(resource.data.classId, resource.data.eventId, request.resource.data.publishedOpinionId))
+            && getAfter(opinionPath(resource.data.classId, resource.data.eventId, request.resource.data.publishedOpinionId)).data.sourceProposalId == proposalId));
+    }
+
+    match /classes/{classId} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin();
+      allow delete: if false;
+
+      match /events/{eventId} {
+        allow get: if resource.data.status == "published" || canModerate(classId);
+        allow list: if boundedList() && (resource.data.status == "published" || canModerate(classId));
+        allow create: if canModerate(classId) && validEventCreate(request.resource.data, classId, eventId);
+        allow update: if canModerate(classId)
+          && resource.data.status == "published"
+          && request.resource.data.status == "archived"
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "archivedAt", "archivedBy", "updatedAt"])
+          && request.resource.data.archivedAt == request.time
+          && request.resource.data.archivedBy == request.auth.uid
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if false;
+
+        match /opinions/{opinionId} {
+          allow get: if resource.data.status == "published"
+            && get(eventPath(classId, eventId)).data.status == "published";
+          allow list: if boundedList() && resource.data.status == "published"
+            && get(eventPath(classId, eventId)).data.status == "published";
+          allow create: if canModerate(classId)
+            && get(eventPath(classId, eventId)).data.status == "published"
+            && validOpinionCreate(request.resource.data, classId, eventId, opinionId);
+          allow update, delete: if false;
+        }
+      }
+    }
+
+    match /scheduleProposals/{proposalId} {
+      allow create: if isAnonymousStudent()
+        && request.resource.data.ownerUid == request.auth.uid
+        && validPendingSchedule(request.resource.data);
+      allow get: if (isAnonymousStudent() && resource.data.ownerUid == request.auth.uid)
+        || canModerate(resource.data.classId);
+      allow list: if boundedList()
+        && ((isAnonymousStudent() && resource.data.ownerUid == request.auth.uid)
+          || canModerate(resource.data.classId));
+      allow update: if validScheduleReview(proposalId);
+      allow delete: if false;
+    }
+
+    match /opinionProposals/{proposalId} {
+      allow create: if isAnonymousStudent()
+        && request.resource.data.ownerUid == request.auth.uid
+        && validPendingOpinion(request.resource.data)
+        && exists(eventPath(request.resource.data.classId, request.resource.data.eventId))
+        && get(eventPath(request.resource.data.classId, request.resource.data.eventId)).data.status == "published";
+      allow get: if (isAnonymousStudent() && resource.data.ownerUid == request.auth.uid)
+        || canModerate(resource.data.classId);
+      allow list: if boundedList()
+        && ((isAnonymousStudent() && resource.data.ownerUid == request.auth.uid)
+          || canModerate(resource.data.classId));
+      allow update: if validOpinionReview(proposalId);
+      allow delete: if false;
+    }
+
+    match /admins/{uid} {
+      allow get: if isSuperAdmin() || (isGoogleUser() && request.auth.uid == uid);
+      allow list: if isSuperAdmin();
+      allow create, update, delete: if false;
     }
   }
 }

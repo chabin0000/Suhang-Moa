@@ -27,6 +27,7 @@ const firebaseSdk = vi.hoisted(() => {
   const firestore = { name: "test-firestore" };
   const appCheck = { name: "test-app-check" };
   const localPersistence = { type: "LOCAL" };
+  const sessionPersistence = { type: "SESSION" };
   const googleProvider = { providerId: "google.com" };
   const apps = new Map<
     string,
@@ -44,6 +45,7 @@ const firebaseSdk = vi.hoisted(() => {
     firestore,
     appCheck,
     localPersistence,
+    sessionPersistence,
     googleProvider,
     apps,
     debugTokenAtInitialization: undefined as boolean | string | undefined,
@@ -73,6 +75,7 @@ vi.mock("firebase/app", () => ({
 
 vi.mock("firebase/auth", () => ({
   browserLocalPersistence: firebaseSdk.localPersistence,
+  browserSessionPersistence: firebaseSdk.sessionPersistence,
   connectAuthEmulator: firebaseSdk.connectAuthEmulator,
   getAuth: firebaseSdk.getAuth,
   GoogleAuthProvider: firebaseSdk.GoogleAuthProvider,
@@ -875,7 +878,7 @@ describe("student and administrator authentication boundaries", () => {
     expect(firebaseSdk.signInAnonymously).toHaveBeenCalledTimes(1);
   });
 
-  it("signs an administrator in with Google and local persistence", async () => {
+  it("signs an administrator in with Google and session persistence", async () => {
     stubRuntimeEnv();
     firebaseSdk.signInWithPopup.mockResolvedValue({ user: adminUser });
     const { signInAdminWithGoogle } = await import("./auth");
@@ -883,13 +886,28 @@ describe("student and administrator authentication boundaries", () => {
     await expect(signInAdminWithGoogle()).resolves.toBe(adminUser);
     expect(firebaseSdk.setPersistence).toHaveBeenCalledWith(
       firebaseSdk.auth,
-      firebaseSdk.localPersistence,
+      firebaseSdk.sessionPersistence,
     );
     expect(firebaseSdk.GoogleAuthProvider).toHaveBeenCalledTimes(1);
     expect(firebaseSdk.signInWithPopup).toHaveBeenCalledWith(
       firebaseSdk.auth,
       firebaseSdk.googleProvider,
     );
+  });
+
+  it("rejects an Emulator endpoint in a production configuration", async () => {
+    const { readFirebaseConfig } = await import("./config");
+    let error: unknown;
+    try {
+      readFirebaseConfig({
+      VITE_FIREBASE_API_KEY: "key", VITE_FIREBASE_AUTH_DOMAIN: "domain", VITE_FIREBASE_PROJECT_ID: "project",
+      VITE_FIREBASE_STORAGE_BUCKET: "bucket", VITE_FIREBASE_MESSAGING_SENDER_ID: "sender", VITE_FIREBASE_APP_ID: "app",
+      VITE_RECAPTCHA_ENTERPRISE_SITE_KEY: "site", VITE_USE_FIREBASE_EMULATORS: "true", VITE_APPCHECK_DEBUG: "false",
+      } as unknown as ImportMetaEnv, "production");
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({ code: "EMULATORS_FORBIDDEN" });
   });
 
   it("hides raw Google sign-in failures", async () => {

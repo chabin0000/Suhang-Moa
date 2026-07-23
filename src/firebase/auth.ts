@@ -1,6 +1,7 @@
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
+  browserSessionPersistence,
   onAuthStateChanged,
   setPersistence,
   signInAnonymously,
@@ -57,7 +58,8 @@ export async function signInAdminWithGoogle(): Promise<User> {
   const auth = requireFirebaseAuth();
 
   try {
-    await setPersistence(auth, browserLocalPersistence);
+    // 공용 PC에서 관리자 권한이 브라우저를 닫은 뒤 남지 않도록 세션으로 제한한다.
+    await setPersistence(auth, browserSessionPersistence);
     const provider = new GoogleAuthProvider();
     return (await signInWithPopup(auth, provider)).user;
   } catch (error) {

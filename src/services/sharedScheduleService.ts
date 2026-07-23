@@ -1,5 +1,6 @@
 import {
   collection,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -133,6 +134,7 @@ export const firebaseSharedScheduleGateway: SharedScheduleGateway = {
         collection(db, "classes", classId, "events"),
         where("status", "==", "published"),
         orderBy("dueDate", "asc"),
+        limit(50),
       );
 
       return onSnapshot(

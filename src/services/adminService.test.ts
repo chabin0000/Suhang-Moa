@@ -4,7 +4,7 @@ import type { AdminScope, ClassId } from "../types";
 const firebaseAppMock = vi.hoisted(() => ({ getFirestoreDb: vi.fn() }));
 const firestoreMock = vi.hoisted(() => ({
   collection: vi.fn(), doc: vi.fn(), getDoc: vi.fn(), onSnapshot: vi.fn(), orderBy: vi.fn(),
-  query: vi.fn(), runTransaction: vi.fn(), serverTimestamp: vi.fn(), where: vi.fn(),
+  limit: vi.fn(), query: vi.fn(), runTransaction: vi.fn(), serverTimestamp: vi.fn(), where: vi.fn(),
 }));
 
 vi.mock("../firebase/app", () => firebaseAppMock);
@@ -81,6 +81,7 @@ describe("adminService", () => {
       "segments" in (first as object) ? { id: "event-fixed", kind: "public", parent: first } : { kind: "doc", segments }
     ));
     firestoreMock.serverTimestamp.mockReturnValue("SERVER_TIME");
+    firestoreMock.limit.mockReturnValue({ limit: 50 });
   });
 
   it("normalizes a verified super-admin email without reading Firestore", async () => {

@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDoc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -426,7 +427,9 @@ export const firebaseModerationQueueGateway: ModerationQueueGateway = {
         onNext(tab === "history" ? rows.sort(compareHistoryRows) : rows);
       };
       for (const [kind, path] of sources) {
-        const constraints = classConstraint ? [classConstraint, statusConstraint, orderConstraint] : [statusConstraint, orderConstraint];
+        const constraints = classConstraint
+          ? [classConstraint, statusConstraint, orderConstraint, limit(50)]
+          : [statusConstraint, orderConstraint, limit(50)];
         const sourceQuery = query(collection(db, path), ...constraints);
         unsubscribes.push(onSnapshot(sourceQuery, (snapshot) => {
           if (!active) return;

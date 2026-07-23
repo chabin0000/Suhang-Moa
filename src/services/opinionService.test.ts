@@ -6,6 +6,7 @@ const firebaseAuthMock = vi.hoisted(() => ({ ensureAnonymousStudent: vi.fn() }))
 const firestoreMock = vi.hoisted(() => ({
   collection: vi.fn(),
   doc: vi.fn(),
+  limit: vi.fn(),
   onSnapshot: vi.fn(),
   orderBy: vi.fn(),
   query: vi.fn(),
@@ -104,6 +105,7 @@ describe("Firebase opinion gateway", () => {
     );
     firestoreMock.where.mockReturnValue({ kind: "published" });
     firestoreMock.orderBy.mockReturnValue({ kind: "approved-order" });
+    firestoreMock.limit.mockReturnValue({ kind: "limit-50" });
     firestoreMock.query.mockReturnValue({ kind: "opinions-query" });
     firestoreMock.serverTimestamp.mockReturnValue("server-time");
     firestoreMock.onSnapshot.mockImplementation((_query: unknown, next: typeof listener, error: typeof errorListener) => {

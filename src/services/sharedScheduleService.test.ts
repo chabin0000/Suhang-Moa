@@ -8,6 +8,7 @@ const firebaseAppMock = vi.hoisted(() => ({
 
 const firestoreMock = vi.hoisted(() => ({
   collection: vi.fn(),
+  limit: vi.fn(),
   onSnapshot: vi.fn(),
   orderBy: vi.fn(),
   query: vi.fn(),
@@ -77,6 +78,7 @@ describe("firebaseSharedScheduleGateway", () => {
   const collectionReference = { kind: "events-collection" };
   const publishedConstraint = { kind: "published-constraint" };
   const dueDateConstraint = { kind: "due-date-constraint" };
+  const limitConstraint = { kind: "limit-50" };
   const publishedQuery = { kind: "published-query" };
 
   beforeEach(() => {
@@ -85,6 +87,7 @@ describe("firebaseSharedScheduleGateway", () => {
     firestoreMock.collection.mockReturnValue(collectionReference);
     firestoreMock.where.mockReturnValue(publishedConstraint);
     firestoreMock.orderBy.mockReturnValue(dueDateConstraint);
+    firestoreMock.limit.mockReturnValue(limitConstraint);
     firestoreMock.query.mockReturnValue(publishedQuery);
   });
 
@@ -114,6 +117,7 @@ describe("firebaseSharedScheduleGateway", () => {
       collectionReference,
       publishedConstraint,
       dueDateConstraint,
+      limitConstraint,
     );
     expect(returned).toBe(unsubscribe);
 

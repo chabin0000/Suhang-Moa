@@ -24,6 +24,7 @@ export interface FirebasePublicConfig {
 
 export type FirebaseClientErrorCode =
   | "APPCHECK_DEBUG_FORBIDDEN"
+  | "EMULATORS_FORBIDDEN"
   | "APPCHECK_CONFIG_MISMATCH"
   | "APPCHECK_INITIALIZATION_FAILED"
   | "AUTH_ADMIN_SESSION_ACTIVE"
@@ -39,6 +40,7 @@ export type FirebaseClientErrorCode =
 const FIREBASE_CLIENT_ERROR_MESSAGES = {
   APPCHECK_DEBUG_FORBIDDEN:
     "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
+  EMULATORS_FORBIDDEN: "운영 환경에서는 Firebase Emulator를 사용할 수 없습니다.",
   APPCHECK_CONFIG_MISMATCH:
     "App Check 설정 충돌이 감지되었습니다. 페이지를 새로고침해 주세요.",
   APPCHECK_INITIALIZATION_FAILED: "App Check를 초기화하지 못했습니다.",
@@ -108,6 +110,11 @@ export function readFirebaseConfig(
     appCheckDebug.data
   ) {
     throw new FirebaseClientError("APPCHECK_DEBUG_FORBIDDEN");
+  }
+
+  const emulatorMode = booleanStringSchema.safeParse(env.VITE_USE_FIREBASE_EMULATORS);
+  if (mode === "production" && emulatorMode.success && emulatorMode.data) {
+    throw new FirebaseClientError("EMULATORS_FORBIDDEN");
   }
 
   const parsed = firebaseEnvSchema.safeParse(env);

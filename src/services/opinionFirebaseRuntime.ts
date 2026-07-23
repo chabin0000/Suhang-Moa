@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where } from "firebase/firestore";
+import { collection, doc, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where } from "firebase/firestore";
 import { getFirestoreDb } from "../firebase/app";
 import { ensureAnonymousStudent } from "../firebase/auth";
 import { storedPublishedOpinionSchema } from "../schemas/opinion";
@@ -44,6 +44,7 @@ export async function loadFirebaseOpinionGateway(): Promise<OpinionGateway> {
           collection(db, "classes", classId, "events", eventId, "opinions"),
           where("status", "==", "published"),
           orderBy("approvedAt", "desc"),
+          limit(50),
         );
         const activeGeneration = ++generation;
         const unsubscribe = onSnapshot(publishedOpinionsQuery, (snapshot) => {
