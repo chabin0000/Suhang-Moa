@@ -3,3 +3,11 @@ dist/
 *.log
 .env
 .env.local
+.superpowers/
+.firebase/
+firebase-debug.log
+firestore-debug.log
+playwright-report/
+test-results/
+.env.*
+!.env.example
