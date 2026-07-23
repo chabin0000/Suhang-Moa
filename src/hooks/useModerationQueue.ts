@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   ModerationQueueErrorCode,
   ModerationQueueGateway,
@@ -15,6 +15,7 @@ export type ModerationQueueState = {
   loading: boolean;
   empty: boolean;
   error: ModerationQueueErrorCode | null;
+  refresh: () => void;
 };
 
 type GatewayLoader = () => Promise<ModerationQueueGateway>;
@@ -36,7 +37,9 @@ export function useModerationQueue(
   gateway?: ModerationQueueGateway,
   loadGateway: GatewayLoader = loadDefaultModerationQueueGateway,
 ): ModerationQueueState {
-  const [state, setState] = useState<ModerationQueueState>({ rows: [], loading: Boolean(scope), empty: false, error: null });
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
+  const [state, setState] = useState<Omit<ModerationQueueState, "refresh">>({ rows: [], loading: Boolean(scope), empty: false, error: null });
 
   useEffect(() => {
     let active = true;
@@ -69,7 +72,7 @@ export function useModerationQueue(
       if (active) setState({ rows: [], loading: false, empty: false, error: "retryable" });
     });
     return () => { active = false; unsubscribe?.(); };
-  }, [scope, selectedClassId, tab, gateway, loadGateway]);
+  }, [scope, selectedClassId, tab, gateway, loadGateway, refreshKey]);
 
-  return state;
+  return { ...state, refresh };
 }

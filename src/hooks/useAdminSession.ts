@@ -4,8 +4,13 @@ import {
   signOutCurrentUser,
   subscribeAuthState,
 } from "../firebase/auth";
-import { AdminScopeLookupError, getAdminScope } from "../services/adminService";
 import type { AdminScope } from "../types";
+
+const adminServicePromise = import("../services/adminService");
+
+function loadAdminScope(user: { uid: string; email: string | null; emailVerified: boolean }): Promise<AdminScope | null> {
+  return adminServicePromise.then(({ getAdminScope }) => getAdminScope(user));
+}
 
 type AdminUser = {
   uid: string;
@@ -71,7 +76,7 @@ export function useAdminSession(): AdminSession {
       deniedUserUid.current = null;
       autoSignOutAttemptedUid.current = null;
       setSession({ status: "checking", user, scope: null, message: null });
-      void getAdminScope(user)
+      void loadAdminScope(user)
         .then((scope) => {
           if (!active || currentGeneration !== generation.current) return;
           if (scope) {
@@ -102,9 +107,7 @@ export function useAdminSession(): AdminSession {
         .catch((error: unknown) => {
           if (!active || currentGeneration !== generation.current) return;
           deniedUserUid.current = user.uid;
-          const message = error instanceof AdminScopeLookupError
-            ? "관리자 권한을 확인하지 못했습니다. 잠시 후 다시 로그인해 주세요."
-            : "관리자 권한을 확인하지 못했습니다.";
+          const message = "관리자 권한을 확인하지 못했습니다. 잠시 후 다시 로그인해 주세요.";
           setSession({ status: "unauthorized", user, scope: null, message });
           if (autoSignOutAttemptedUid.current !== user.uid) {
             autoSignOutAttemptedUid.current = user.uid;

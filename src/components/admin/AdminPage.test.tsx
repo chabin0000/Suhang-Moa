@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHashRoute } from "../../hooks/useHashRoute";
 import { useAdminSession } from "../../hooks/useAdminSession";
 import type { AdminScope } from "../../types";
+import type { ModerationQueueGateway, ModerationQueueRow } from "../../services/adminService";
 import AdminPage from "./AdminPage";
 
 const authMock = vi.hoisted(() => ({
@@ -163,5 +164,70 @@ describe("administrator route and session", () => {
     await Promise.resolve();
     expect(result.current.user?.uid).toBe("user-b");
     expect(result.current.scope).toEqual({ role: "super_admin", classIds: [] });
+  });
+});
+
+describe("administrator moderation workspace", () => {
+  afterEach(() => cleanup());
+  const scope: AdminScope = { role: "class_admin", classIds: ["grade-1-class-2"] };
+  const schedule = {
+    id: "proposal-1", kind: "schedule" as const, batchId: "batch", ownerUid: "student", classId: "grade-1-class-2" as const,
+    nickname: "민지", title: "초안 제목", subject: "물리", description: "원본 설명", type: "performance" as const,
+    dueDate: "2026-08-01", status: "pending" as const, createdAt: null, reviewedAt: null,
+    reviewedBy: null, rejectionReason: null, publishedEventId: null,
+  };
+  const opinion = {
+    id: "opinion-1", kind: "opinion" as const, classId: "grade-1-class-2" as const, eventId: "event-1", ownerUid: "student",
+    nickname: "학생", content: "<b>그대로 보이는 의견</b>", status: "pending" as const, createdAt: null,
+    reviewedAt: null, reviewedBy: null, rejectionReason: null, publishedOpinionId: null,
+  };
+
+  function renderWorkspace(rows: ModerationQueueRow[] = [schedule]) {
+    let listener: (next: ModerationQueueRow[]) => void = () => {};
+    const gateway: ModerationQueueGateway = {
+      subscribe: vi.fn((_scope, _classId, _tab, onNext) => { listener = onNext; queueMicrotask(() => onNext(rows)); return vi.fn(); }),
+    };
+    const commands = {
+      approveSchedule: vi.fn().mockResolvedValue({ status: "approved" }), rejectSchedule: vi.fn().mockResolvedValue({ status: "rejected" }),
+      approveOpinion: vi.fn().mockResolvedValue({ status: "approved" }), rejectOpinion: vi.fn().mockResolvedValue({ status: "rejected" }),
+      archiveEvent: vi.fn().mockResolvedValue({ status: "archived" }),
+    };
+    const session = { status: "authorized" as const, scope, user: { uid: "teacher", email: "teacher@example.com", emailVerified: true, isAnonymous: false }, message: null, login: vi.fn(), logout: vi.fn() };
+    render(<AdminPage sessionOverride={session} queueGateway={gateway} commands={commands} />);
+    return { gateway, commands, emit: (next: ModerationQueueRow[]) => listener(next) };
+  }
+
+  it("uses exactly three Task 9 tabs, scoped class queries, and 36 super-admin class options", async () => {
+    const { gateway } = renderWorkspace();
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(await screen.findByRole("option", { name: "1학년 2반" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "1학년 3반" })).not.toBeInTheDocument();
+    await waitFor(() => expect(gateway.subscribe).toHaveBeenLastCalledWith(scope, "grade-1-class-2", "schedules", expect.any(Function), expect.any(Function)));
+  });
+
+  it("keeps list context, validates drafts, and submits the exact edited schedule command once", async () => {
+    const { commands } = renderWorkspace();
+    await screen.findByRole("button", { name: /초안 제목/ });
+    fireEvent.click(screen.getByRole("button", { name: /초안 제목/ }));
+    const title = screen.getByLabelText("제목");
+    fireEvent.change(title, { target: { value: "수정 제목" } });
+    fireEvent.click(screen.getByRole("button", { name: "확인하고 게시" }));
+    await waitFor(() => expect(commands.approveSchedule).toHaveBeenCalledWith(scope, "teacher", expect.objectContaining({ proposalId: "proposal-1", classId: "grade-1-class-2", title: "수정 제목" })));
+    expect(screen.getByText("초안 제목")).toBeInTheDocument();
+  });
+
+  it("shows opinion text as text, requires a rejection reason, and locks duplicate actions", async () => {
+    const { commands } = renderWorkspace([opinion]);
+    await screen.findByRole("button", { name: /학생/ });
+    fireEvent.click(screen.getByRole("button", { name: /학생/ }));
+    expect(screen.getByText("<b>그대로 보이는 의견</b>")).toBeInTheDocument();
+    expect(screen.queryByLabelText("제목")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "반려" }));
+    fireEvent.click(screen.getByRole("button", { name: "반려 확정" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "근거가 부족합니다" } });
+    fireEvent.click(screen.getByRole("button", { name: "반려 확정" }));
+    fireEvent.click(screen.getByRole("button", { name: "반려 확정" }));
+    await waitFor(() => expect(commands.rejectOpinion).toHaveBeenCalledOnce());
   });
 });
