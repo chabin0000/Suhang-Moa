@@ -5,8 +5,12 @@ import AdminLoginButton from "./AdminLoginButton";
 export default function AdminPage() {
   const session = useAdminSession();
 
+  function handleLogout() {
+    void session.logout().catch(() => undefined);
+  }
+
   return (
-    <main className="admin-page">
+    <section className="admin-page" aria-label="관리자 작업 공간">
       <header className="admin-header">
         <div>
           <p className="admin-eyebrow">CLASSMAP ADMIN</p>
@@ -20,7 +24,7 @@ export default function AdminPage() {
               type="button"
               aria-label="로그아웃"
               title="로그아웃"
-              onClick={() => void session.logout()}
+              onClick={handleLogout}
             >
               <LogOut aria-hidden="true" size={18} />
             </button>
@@ -33,6 +37,7 @@ export default function AdminPage() {
           <div className="admin-state">
             <h2>관리자 로그인</h2>
             <p>권한이 있는 Google 계정으로 로그인하세요.</p>
+            {session.message && <p className="admin-session-message">{session.message}</p>}
             <AdminLoginButton onLogin={session.login} />
           </div>
         )}
@@ -44,6 +49,9 @@ export default function AdminPage() {
             <h2>접근 권한 없음</h2>
             <p>{session.message}</p>
             <AdminLoginButton onLogin={session.login} />
+            <button className="secondary-button" type="button" onClick={handleLogout}>
+              로그아웃 다시 시도
+            </button>
           </div>
         )}
         {session.status === "authorized" && session.scope && (
@@ -52,11 +60,12 @@ export default function AdminPage() {
               <p className="admin-scope-label">{session.scope.role === "super_admin" ? "최고 관리자" : "반 관리자"}</p>
               <h2>{session.scope.role === "super_admin" ? "전체 반 권한" : "담당 반 권한"}</h2>
               <p>{session.scope.role === "super_admin" ? "모든 반의 공유 일정 관리 권한이 있습니다." : session.scope.classIds.join(", ")}</p>
+              {session.message && <p className="admin-session-message">{session.message}</p>}
             </div>
             <div className="admin-empty-work">검토할 작업은 아직 없습니다.</div>
           </div>
         )}
       </section>
-    </main>
+    </section>
   );
 }

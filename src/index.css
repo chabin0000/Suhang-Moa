@@ -395,6 +395,12 @@ button:disabled {
   border-left: 3px solid var(--genesis-error);
 }
 
+.admin-session-message {
+  margin-top: 12px !important;
+  color: var(--genesis-error) !important;
+  font-weight: 700;
+}
+
 .admin-empty-work {
   min-width: min(100%, 280px);
   border-left: 1px solid var(--genesis-border);

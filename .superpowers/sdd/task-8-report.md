@@ -11,9 +11,14 @@
 - Generation and cleanup guards prevent stale scope lookups from overwriting a newer user session.
 - Compact administrator work surface with calendar return link and lucide logout icon. No moderation queue or commands were added.
 
+## Task 11 Blocker
+
+- Client-side role discovery only controls the UI. Firestore Rules must later allow an authenticated administrator to `get` only their own `admins/{uid}` document, while denying client writes.
+- Task 11 must add this `admins/{uid}` self-get Rule and prove it with the Firestore Emulator. `firestore.rules` is intentionally unchanged in Task 8.
+
 ## Verification
 
-- `pnpm vitest run src/services/adminService.test.ts src/components/admin/AdminPage.test.tsx`: 15 passed.
-- `pnpm test:run`: 15 files, 140 tests passed.
+- `pnpm vitest run src/services/adminService.test.ts src/components/admin/AdminPage.test.tsx`: 19 passed.
+- `pnpm test:run`: 15 files, 144 tests passed.
 - `pnpm build`: passed with zero Vite warnings; `AdminPage.js` emitted as a separate lazy chunk.
 - `git diff --check`: passed.
