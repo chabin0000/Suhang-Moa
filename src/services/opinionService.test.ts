@@ -124,16 +124,17 @@ describe("Firebase opinion gateway", () => {
     expect(firestoreMock.orderBy).toHaveBeenCalledWith("approvedAt", "desc");
   });
 
-  it("skips malformed public documents and blocks late callbacks after cleanup", async () => {
+  it("shows approved documents with an approver and skips missing, extra, or malformed records", async () => {
     const onNext = vi.fn();
     const onError = vi.fn();
     const gateway = await loadDefaultOpinionGateway();
     const unsubscribe = gateway.subscribePublished(classId, "event-1", onNext, onError);
     listener?.({ docs: [
-      { id: "valid", data: () => ({ nickname: "Kim", content: "Useful", status: "published", sourceProposalId: "p-1", approvedAt: { toDate: () => new Date("2026-07-20") } }) },
+      { id: "valid", data: () => ({ nickname: "Kim", content: "Useful", status: "published", sourceProposalId: "p-1", approvedBy: "admin-1", approvedAt: { toDate: () => new Date("2026-07-20") } }) },
+      { id: "missing-approver", data: () => ({ nickname: "Kim", content: "Missing", status: "published", sourceProposalId: "p-2", approvedAt: null }) },
       { id: "bad", data: () => ({ nickname: "Kim", content: "bad", status: "published", sourceProposalId: "p-2", approvedAt: null, extra: true }) },
     ] });
-    expect(onNext).toHaveBeenCalledWith([expect.objectContaining({ id: "valid" })]);
+    expect(onNext).toHaveBeenCalledWith([expect.objectContaining({ id: "valid", approvedBy: "admin-1" })]);
 
     unsubscribe();
     listener?.({ docs: [] });

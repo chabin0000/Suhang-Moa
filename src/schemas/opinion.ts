@@ -10,6 +10,7 @@ export interface OpinionDraft {
 export interface PublishedOpinion extends OpinionDraft {
   id: string;
   sourceProposalId: string;
+  approvedBy: string;
   status: "published";
   approvedAt: Date | null;
 }
@@ -48,6 +49,7 @@ export const storedPublishedOpinionSchema = z.object({
   nickname: z.string().trim().min(1).max(20),
   content: z.string().trim().min(1).max(500),
   sourceProposalId: z.string().min(1),
+  approvedBy: z.string().min(1),
   status: z.literal("published"),
   approvedAt: firestoreDateSchema.nullable(),
 }).strict();

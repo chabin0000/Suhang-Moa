@@ -21,7 +21,7 @@ function renderDetails(item: CalendarItem = shared, submit = vi.fn().mockResolve
     trigger,
     submit,
     ...render(<ScheduleDetails item={item} onClose={vi.fn()} onEditPersonal={vi.fn()} onDeletePersonal={vi.fn()} opinionGateway={{
-      subscribePublished: (_classId, _eventId, onNext) => { onNext([{ id: "opinion-1", nickname: "Kim", content: "Use <strong>text</strong>", sourceProposalId: "proposal-old", status: "published", approvedAt: new Date("2026-07-20") }]); return vi.fn(); },
+      subscribePublished: (_classId, _eventId, onNext) => { onNext([{ id: "opinion-1", nickname: "Kim", content: "Use <strong>text</strong>", sourceProposalId: "proposal-old", approvedBy: "admin-1", status: "published", approvedAt: new Date("2026-07-20") }]); return vi.fn(); },
       submit,
     }} />),
   };
@@ -61,6 +61,44 @@ describe("ScheduleDetails", () => {
     expect(screen.getByLabelText("팁·의견")).toHaveValue("Retry text");
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("locks body scrolling and traps Tab focus until the dialog is closed", () => {
+    const { unmount } = renderDetails();
+    const close = document.querySelector<HTMLButtonElement>(".icon-button");
+    const submit = document.querySelector<HTMLButtonElement>(".opinion-form button");
+    if (!close || !submit) throw new Error("dialog controls were not rendered");
+
+    expect(document.body.style.overflow).toBe("hidden");
+    submit.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(submit).toHaveFocus();
+
+    unmount();
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("does not steal focus from the personal editor transition", async () => {
+    const editor = document.createElement("input");
+    const opener = document.createElement("button");
+    document.body.append(editor);
+    document.body.append(opener);
+    opener.focus();
+    render(
+      <ScheduleDetails
+        item={personal}
+        onClose={vi.fn()}
+        onEditPersonal={() => editor.focus()}
+        onDeletePersonal={vi.fn()}
+      />,
+    );
+
+    const edit = document.querySelector<HTMLButtonElement>(".schedule-card-actions .secondary-button");
+    if (!edit) throw new Error("personal edit control was not rendered");
+    fireEvent.click(edit);
+    await waitFor(() => expect(editor).toHaveFocus());
   });
 });
 
