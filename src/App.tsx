@@ -1,14 +1,18 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import ClassDashboard from "./components/ClassDashboard";
 import ClassSelectPage from "./components/ClassSelectPage";
 import { useSharedSchedules } from "./hooks/useSharedSchedules";
+import { useHashRoute } from "./hooks/useHashRoute";
 import type { SelectedClass } from "./types";
 import { toClassId } from "./utils/classId";
 import { getSelectedClass, saveSelectedClass } from "./utils/storage";
 
 type Screen = "select" | "dashboard";
 
+const AdminPage = lazy(() => import("./components/admin/AdminPage"));
+
 export default function App() {
+  const route = useHashRoute();
   const [selectedClass, setSelectedClass] = useState<SelectedClass | null>(() =>
     getSelectedClass(),
   );
@@ -26,7 +30,11 @@ export default function App() {
 
   return (
     <main className="app-container">
-      {screen === "select" || !selectedClass ? (
+      {route === "admin" ? (
+        <Suspense fallback={<p className="admin-loading">관리자 화면을 불러오는 중입니다.</p>}>
+          <AdminPage />
+        </Suspense>
+      ) : screen === "select" || !selectedClass ? (
         <ClassSelectPage
           savedClass={selectedClass}
           onEnterClass={handleEnterClass}

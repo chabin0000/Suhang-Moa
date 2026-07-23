@@ -319,6 +319,90 @@ button:disabled {
   color: var(--genesis-text-secondary);
 }
 
+.admin-loading,
+.admin-page {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+}
+
+.admin-loading {
+  padding: 48px 20px;
+  color: var(--genesis-text-secondary);
+}
+
+.admin-page {
+  min-height: 100vh;
+  padding: 28px 20px 64px;
+}
+
+.admin-header,
+.admin-header-actions,
+.admin-authorized {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-header {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--genesis-border);
+}
+
+.admin-header h1,
+.admin-state h2,
+.admin-authorized h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.admin-eyebrow,
+.admin-scope-label {
+  margin: 0 0 6px;
+  color: var(--genesis-text-secondary);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-work-area {
+  margin-top: 24px;
+  border: 1px solid var(--genesis-border);
+  background: var(--genesis-surface);
+}
+
+.admin-state,
+.admin-authorized {
+  min-height: 220px;
+  padding: 24px;
+}
+
+.admin-state {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 12px;
+}
+
+.admin-state p,
+.admin-authorized p {
+  margin: 0;
+  color: var(--genesis-text-secondary);
+  line-height: 1.55;
+}
+
+.admin-state-error {
+  border-left: 3px solid var(--genesis-error);
+}
+
+.admin-empty-work {
+  min-width: min(100%, 280px);
+  border-left: 1px solid var(--genesis-border);
+  color: var(--genesis-text-secondary);
+  padding: 32px 24px;
+  text-align: center;
+}
+
 .summary-widgets {
   display: grid;
   gap: 12px;
