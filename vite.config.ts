@@ -16,6 +16,14 @@ export default defineConfig(({ mode }) => {
           assetFileNames: "assets/[name][extname]",
           chunkFileNames: "assets/[name].js",
           entryFileNames: "assets/app.js",
+          manualChunks(id) {
+            if (!id.includes("/node_modules/@firebase/")) {
+              return undefined;
+            }
+
+            const packageName = id.split("/node_modules/@firebase/")[1]?.split("/")[0];
+            return packageName ? `firebase-${packageName}` : undefined;
+          },
         },
       },
     },

@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import {
-  firebaseSharedScheduleGateway,
-  SharedScheduleGatewayError,
-  SharedScheduleValidationError,
-  type SharedScheduleErrorCode,
-  type SharedScheduleGateway,
+import type {
+  SharedScheduleErrorCode,
+  SharedScheduleGateway,
+  SharedScheduleSubscriptionError,
 } from "../services/sharedScheduleService";
 import type { ClassId, SharedEvent } from "../types";
 
@@ -14,9 +12,33 @@ export type SharedSchedulesState = {
   error: SharedScheduleErrorCode | null;
 };
 
+type DefaultGatewayLoader = () => Promise<SharedScheduleGateway>;
+
+export async function loadDefaultSharedScheduleGateway(): Promise<SharedScheduleGateway> {
+  const { firebaseSharedScheduleGateway } = await import(
+    "../services/sharedScheduleService"
+  );
+  return firebaseSharedScheduleGateway;
+}
+
+function getErrorCode(
+  error: SharedScheduleSubscriptionError,
+): SharedScheduleErrorCode {
+  if (
+    error.code === "firebase-disabled" ||
+    error.code === "permission-denied" ||
+    error.code === "network"
+  ) {
+    return error.code;
+  }
+
+  return "network";
+}
+
 export function useSharedSchedules(
   classId: ClassId | null,
-  gateway: SharedScheduleGateway = firebaseSharedScheduleGateway,
+  gateway?: SharedScheduleGateway,
+  loadDefaultGateway: DefaultGatewayLoader = loadDefaultSharedScheduleGateway,
 ): SharedSchedulesState {
   const [state, setState] = useState<SharedSchedulesState>({
     events: [],
@@ -31,12 +53,34 @@ export function useSharedSchedules(
     }
 
     let isActive = true;
-    let unsubscribe = () => {};
+    let unsubscribe: (() => void) | null = null;
 
     setState({ events: [], loading: true, error: null });
 
-    try {
-      unsubscribe = gateway.subscribePublished(
+    const handleError = (error: SharedScheduleSubscriptionError) => {
+      if (!isActive) {
+        return;
+      }
+
+      if (error.category === "validation") {
+        console.error(`[ClassMap] ${error.message}`);
+        return;
+      }
+
+      setState((current) => ({
+        ...current,
+        loading: false,
+        error: getErrorCode(error),
+      }));
+    };
+
+    const subscribe = (selectedGateway: SharedScheduleGateway) => {
+      if (!isActive) {
+        return;
+      }
+
+      try {
+        const nextUnsubscribe = selectedGateway.subscribePublished(
         classId,
         (events) => {
           if (!isActive) {
@@ -45,43 +89,47 @@ export function useSharedSchedules(
 
           setState({ events, loading: false, error: null });
         },
-        (error) => {
-          if (!isActive) {
-            return;
-          }
-
-          if (error instanceof SharedScheduleValidationError) {
-            console.error(`[ClassMap] ${error.message}`);
-            return;
-          }
-
-          const code =
-            error instanceof SharedScheduleGatewayError
-              ? error.code
-              : "network";
-
-          setState((current) => ({
-            ...current,
-            loading: false,
-            error: code,
-          }));
-        },
+        handleError,
       );
-    } catch {
-      if (isActive) {
-        setState({
-          events: [],
-          loading: false,
-          error: "network",
-        });
+        if (isActive) {
+          unsubscribe = nextUnsubscribe;
+        } else {
+          nextUnsubscribe();
+        }
+      } catch {
+        if (isActive) {
+          setState({
+            events: [],
+            loading: false,
+            error: "network",
+          });
+        }
       }
+    };
+
+    if (gateway) {
+      subscribe(gateway);
+    } else {
+      void loadDefaultGateway()
+        .then((defaultGateway) => {
+          subscribe(defaultGateway);
+        })
+        .catch(() => {
+          if (isActive) {
+            setState({
+              events: [],
+              loading: false,
+              error: "network",
+            });
+          }
+        });
     }
 
     return () => {
       isActive = false;
-      unsubscribe();
+      unsubscribe?.();
     };
-  }, [classId, gateway]);
+  }, [classId, gateway, loadDefaultGateway]);
 
   return state;
 }

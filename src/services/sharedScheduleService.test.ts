@@ -25,6 +25,12 @@ import {
 } from "./sharedScheduleService";
 import { useSharedSchedules } from "../hooks/useSharedSchedules";
 
+type UseSharedSchedulesWithLoader = (
+  classId: ClassId | null,
+  gateway?: SharedScheduleGateway,
+  loadDefaultGateway?: () => Promise<SharedScheduleGateway>,
+) => ReturnType<typeof useSharedSchedules>;
+
 type SnapshotDocument = {
   id: string;
   data: () => unknown;
@@ -436,6 +442,62 @@ describe("useSharedSchedules", () => {
       loading: false,
       error: null,
     });
+  });
+
+  it("waits for the default gateway and only subscribes to the latest class", async () => {
+    let resolveGateway: ((gateway: SharedScheduleGateway) => void) | undefined;
+    const loadDefaultGateway = () =>
+      new Promise<SharedScheduleGateway>((resolve) => {
+        resolveGateway = resolve;
+      });
+    const unsubscribe = vi.fn();
+    const gateway: SharedScheduleGateway = {
+      subscribePublished: vi.fn(() => unsubscribe),
+    };
+    const useHook = useSharedSchedules as UseSharedSchedulesWithLoader;
+    const { rerender, unmount } = renderHook(
+      ({ classId }) => useHook(classId, undefined, loadDefaultGateway),
+      { initialProps: { classId: classOne as ClassId | null } },
+    );
+
+    rerender({ classId: classTwo });
+    resolveGateway?.(gateway);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(gateway.subscribePublished).toHaveBeenCalledTimes(1);
+    expect(gateway.subscribePublished).toHaveBeenCalledWith(
+      classTwo,
+      expect.any(Function),
+      expect.any(Function),
+    );
+
+    unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not leave a listener behind when unmounted before the default gateway loads", async () => {
+    let resolveGateway: ((gateway: SharedScheduleGateway) => void) | undefined;
+    const loadDefaultGateway = () =>
+      new Promise<SharedScheduleGateway>((resolve) => {
+        resolveGateway = resolve;
+      });
+    const gateway: SharedScheduleGateway = {
+      subscribePublished: vi.fn(() => vi.fn()),
+    };
+    const useHook = useSharedSchedules as UseSharedSchedulesWithLoader;
+    const { unmount } = renderHook(() =>
+      useHook(classOne, undefined, loadDefaultGateway),
+    );
+
+    unmount();
+    resolveGateway?.(gateway);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(gateway.subscribePublished).not.toHaveBeenCalled();
   });
 });
 

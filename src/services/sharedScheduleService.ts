@@ -21,9 +21,14 @@ export interface SharedScheduleGateway {
   subscribePublished(
     classId: ClassId,
     onNext: (events: SharedEvent[]) => void,
-    onError: (error: Error) => void,
+    onError: (error: SharedScheduleSubscriptionError) => void,
   ): () => void;
 }
+
+export type SharedScheduleSubscriptionError = Error & {
+  code?: SharedScheduleErrorCode;
+  category?: "validation";
+};
 
 export class SharedScheduleGatewayError extends Error {
   readonly code: SharedScheduleErrorCode;
@@ -36,6 +41,7 @@ export class SharedScheduleGatewayError extends Error {
 }
 
 export class SharedScheduleValidationError extends Error {
+  readonly category = "validation";
   readonly documentId: string;
 
   constructor(documentId: string) {
