@@ -19,20 +19,26 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-function isSelectedClass(value: unknown): value is SelectedClass {
+function hasValidClassCoordinates(value: unknown): boolean {
   if (!value || typeof value !== "object") {
     return false;
   }
 
-  const candidate = value as SelectedClass;
+  const candidate = value as { grade?: unknown; classNo?: unknown };
   return (
+    typeof candidate.grade === "number" &&
     Number.isInteger(candidate.grade) &&
     candidate.grade >= 1 &&
     candidate.grade <= 3 &&
+    typeof candidate.classNo === "number" &&
     Number.isInteger(candidate.classNo) &&
     candidate.classNo >= 1 &&
     candidate.classNo <= 12
   );
+}
+
+function isSelectedClass(value: unknown): value is SelectedClass {
+  return hasValidClassCoordinates(value);
 }
 
 function isScheduleType(value: unknown): value is ScheduleType {
@@ -47,8 +53,7 @@ function isPersonalSchedule(value: unknown): value is PersonalSchedule {
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.id === "string" &&
-    Number.isInteger(candidate.grade) &&
-    Number.isInteger(candidate.classNo) &&
+    hasValidClassCoordinates(candidate) &&
     typeof candidate.title === "string" &&
     isScheduleType(candidate.type) &&
     typeof candidate.dueDate === "string" &&

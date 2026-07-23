@@ -34,7 +34,7 @@ describe("schedule storage migration", () => {
     expect(loadSchedules()).toEqual([personalSchedule]);
   });
 
-  it("writes a migrated schedule back once in the normalized format", () => {
+  it("writes a migrated schedule back once and not again after normalization", () => {
     window.localStorage.setItem(SCHEDULES_KEY, JSON.stringify([legacySchedule]));
     const setItem = vi.spyOn(Storage.prototype, "setItem");
 
@@ -42,6 +42,11 @@ describe("schedule storage migration", () => {
 
     expect(setItem).toHaveBeenCalledTimes(1);
     expect(setItem).toHaveBeenCalledWith(SCHEDULES_KEY, JSON.stringify([personalSchedule]));
+
+    setItem.mockClear();
+
+    expect(loadSchedules()).toEqual([personalSchedule]);
+    expect(setItem).not.toHaveBeenCalled();
   });
 
   it("round-trips a current personal schedule unchanged", () => {
@@ -60,6 +65,26 @@ describe("schedule storage migration", () => {
 
     expect(loadSchedules()).toEqual([personalSchedule]);
   });
+
+  it("rejects stored schedules outside the supported grade and class ranges", () => {
+    window.localStorage.setItem(
+      SCHEDULES_KEY,
+      JSON.stringify([
+        { ...legacySchedule, grade: 4 },
+        { ...personalSchedule, classNo: 13 },
+      ]),
+    );
+
+    expect(loadSchedules()).toEqual([]);
+  });
+
+  it("does not write back malformed-only schedule data", () => {
+    window.localStorage.setItem(SCHEDULES_KEY, JSON.stringify([{ id: "missing-fields" }]));
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    expect(loadSchedules()).toEqual([]);
+    expect(setItem).not.toHaveBeenCalled();
+  });
 });
 
 describe("class ID conversion", () => {
@@ -76,6 +101,7 @@ describe("class ID conversion", () => {
     "grade-4-class-2",
     "grade-1-class-0",
     "grade-1-class-13",
+    "grade-1-class-2-extra",
   ])("rejects an out-of-range class ID: %s", (classId) => {
     expect(parseClassId(classId)).toBeNull();
     expect(isClassId(classId)).toBe(false);
