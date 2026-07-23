@@ -57,15 +57,19 @@ export async function loadFirebaseProposalHistoryGateway(): Promise<ProposalHist
     subscribeExistingAnonymous(onNext, onError) {
       let unsubscribeProposals: (() => void) | null = null;
       let closed = false;
+      let generation = 0;
       let unsubscribeAuth = () => {};
       try {
         const firebaseAuth = getFirebaseAuth();
         const db = getFirestoreDb();
         if (!firebaseAuth || !db) return () => {};
         unsubscribeAuth = onAuthStateChanged(firebaseAuth, (user) => {
+          if (closed) return;
+          generation += 1;
+          const activeGeneration = generation;
           unsubscribeProposals?.();
           unsubscribeProposals = null;
-          if (closed || !user?.isAnonymous) {
+          if (!user?.isAnonymous) {
             onNext([]);
             return;
           }
@@ -78,7 +82,7 @@ export async function loadFirebaseProposalHistoryGateway(): Promise<ProposalHist
           unsubscribeProposals = onSnapshot(
             proposalQuery,
             (snapshot) => {
-              if (closed) return;
+              if (closed || activeGeneration !== generation) return;
               const proposals: ScheduleProposal[] = [];
               for (const documentSnapshot of snapshot.docs) {
                 let parsed: ReturnType<typeof storedProposalSchema.safeParse>;
@@ -96,7 +100,9 @@ export async function loadFirebaseProposalHistoryGateway(): Promise<ProposalHist
               }
               onNext(proposals);
             },
-            () => { if (!closed) onError(); },
+            () => {
+              if (!closed && activeGeneration === generation) onError();
+            },
           );
         });
       } catch {
@@ -104,6 +110,7 @@ export async function loadFirebaseProposalHistoryGateway(): Promise<ProposalHist
       }
       return () => {
         closed = true;
+        generation += 1;
         unsubscribeAuth();
         unsubscribeProposals?.();
       };
