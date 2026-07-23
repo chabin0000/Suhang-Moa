@@ -377,6 +377,28 @@ button:disabled {
   padding: 24px;
 }
 
+/* The authorization summary and the moderation workspace are stacked, not header actions. */
+.admin-authorized {
+  display: grid;
+  align-items: start;
+  justify-content: stretch;
+  min-height: 0;
+  gap: 0;
+}
+
+.admin-authorized h2 {
+  margin: 0 0 4px;
+}
+
+.admin-authorized > .admin-controls {
+  width: 100%;
+  margin-top: 24px;
+}
+
+.admin-authorized > .moderation-grid {
+  width: 100%;
+}
+
 .admin-state {
   display: grid;
   align-content: center;
