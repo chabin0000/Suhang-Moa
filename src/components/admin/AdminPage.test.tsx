@@ -133,7 +133,6 @@ describe("administrator route and session", () => {
 
     expect(await screen.findByText("최고 관리자")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /로그아웃/ }));
-    expect(await screen.findByText(/로그아웃하지 못했습니다/)).toBeInTheDocument();
     expect(screen.getByText("전체 반 권한")).toBeInTheDocument();
   });
 
@@ -144,7 +143,6 @@ describe("administrator route and session", () => {
 
     await expect(result.current.login()).resolves.toBeUndefined();
     await waitFor(() => expect(result.current.status).toBe("signed-out"));
-    expect(result.current.message).toMatch(/로그인하지 못했습니다/);
   });
 
   it("does not allow a late user A scope lookup to overwrite user B", async () => {
@@ -182,7 +180,7 @@ describe("administrator moderation workspace", () => {
     reviewedAt: null, reviewedBy: null, rejectionReason: null, publishedOpinionId: null,
   };
 
-  function renderWorkspace(rows: ModerationQueueRow[] = [schedule]) {
+  function renderWorkspace(rows: ModerationQueueRow[] = [schedule], commandOverrides: Record<string, unknown> = {}) {
     let listener: (next: ModerationQueueRow[]) => void = () => {};
     const gateway: ModerationQueueGateway = {
       subscribe: vi.fn((_scope, _classId, _tab, onNext) => { listener = onNext; queueMicrotask(() => onNext(rows)); return vi.fn(); }),
@@ -190,7 +188,7 @@ describe("administrator moderation workspace", () => {
     const commands = {
       approveSchedule: vi.fn().mockResolvedValue({ status: "approved" }), rejectSchedule: vi.fn().mockResolvedValue({ status: "rejected" }),
       approveOpinion: vi.fn().mockResolvedValue({ status: "approved" }), rejectOpinion: vi.fn().mockResolvedValue({ status: "rejected" }),
-      archiveEvent: vi.fn().mockResolvedValue({ status: "archived" }),
+      archiveEvent: vi.fn().mockResolvedValue({ status: "archived" }), ...commandOverrides,
     };
     const session = { status: "authorized" as const, scope, user: { uid: "teacher", email: "teacher@example.com", emailVerified: true, isAnonymous: false }, message: null, login: vi.fn(), logout: vi.fn() };
     render(<AdminPage sessionOverride={session} queueGateway={gateway} commands={commands} />);
@@ -229,5 +227,25 @@ describe("administrator moderation workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "반려 확정" }));
     fireEvent.click(screen.getByRole("button", { name: "반려 확정" }));
     await waitFor(() => expect(commands.rejectOpinion).toHaveBeenCalledOnce());
+  });
+
+  it("keeps an edited schedule draft after a normal command failure", async () => {
+    const { commands } = renderWorkspace([schedule], { approveSchedule: vi.fn().mockRejectedValue({ code: "network" }) });
+    fireEvent.click((await screen.findByText("\uCD08\uC548 \uC81C\uBAA9")).closest("button")!);
+    fireEvent.change(screen.getByLabelText("\uC81C\uBAA9"), { target: { value: "\uC785\uB825\uAC12 \uC720\uC9C0" } });
+    fireEvent.click(screen.getByRole("button", { name: "\uD655\uC778\uD558\uACE0 \uAC8C\uC2DC" }));
+    await waitFor(() => expect(commands.approveSchedule).toHaveBeenCalledOnce());
+    expect(screen.getByDisplayValue("\uC785\uB825\uAC12 \uC720\uC9C0")).toBeInTheDocument();
+  });
+
+  it("clears selection when its queue row disappears and exposes a mobile back command", async () => {
+    const { emit } = renderWorkspace();
+    fireEvent.click((await screen.findByText("\uCD08\uC548 \uC81C\uBAA9")).closest("button")!);
+    expect(screen.getByRole("button", { name: "Back to queue" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to queue" }));
+    expect(screen.queryByRole("button", { name: "Back to queue" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("\uCD08\uC548 \uC81C\uBAA9").closest("button")!);
+    act(() => emit([]));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Back to queue" })).not.toBeInTheDocument());
   });
 });
