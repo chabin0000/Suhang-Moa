@@ -43,9 +43,6 @@ export interface SharedEvent {
 
 export type CalendarItem = PersonalSchedule | SharedEvent;
 
-// Task 3에서 화면 컴포넌트를 PersonalSchedule로 직접 전환할 때 제거한다.
-export type Schedule = PersonalSchedule;
-
 export interface ScheduleDraft {
   title: string;
   subject: string;

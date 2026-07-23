@@ -1,10 +1,13 @@
 import { useState } from "react";
 import ClassDashboard from "./components/ClassDashboard";
 import ClassSelectPage from "./components/ClassSelectPage";
-import type { SelectedClass } from "./types";
+import type { SelectedClass, SharedEvent } from "./types";
 import { getSelectedClass, saveSelectedClass } from "./utils/storage";
 
 type Screen = "select" | "dashboard";
+
+// Task 5에서 Firebase 구독 결과로 교체한다.
+const sharedEvents: SharedEvent[] = [];
 
 export default function App() {
   const [selectedClass, setSelectedClass] = useState<SelectedClass | null>(() =>
@@ -30,6 +33,7 @@ export default function App() {
       ) : (
         <ClassDashboard
           selectedClass={selectedClass}
+          sharedEvents={sharedEvents}
           onChangeClass={() => setScreen("select")}
         />
       )}

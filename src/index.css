@@ -385,31 +385,54 @@ button:disabled {
 
 .date-cell {
   display: flex;
+  height: 96px;
   min-width: 0;
-  min-height: 96px;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 4px;
+  overflow: hidden;
   border: 0;
   background: var(--genesis-surface);
   color: var(--genesis-text-primary);
-  padding: 8px;
+  padding: 6px;
   text-align: left;
   transition:
     background 200ms ease,
     box-shadow 200ms ease;
 }
 
-.date-cell:hover,
-.date-cell:focus-visible {
-  background: rgba(99, 102, 241, 0.06);
-  outline: none;
-  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.24);
-}
-
 .date-cell.is-muted {
   color: var(--genesis-neutral);
   background: #f6f6f7;
+}
+
+.date-number-button {
+  display: inline-flex;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.date-number-button:hover,
+.date-number-button:focus-visible {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--genesis-primary-hover);
+  outline: 2px solid rgba(99, 102, 241, 0.28);
+  outline-offset: 1px;
+}
+
+.date-cell.is-today .date-number-button {
+  background: var(--genesis-primary);
+  color: #ffffff;
 }
 
 .date-cell.is-today .date-number {
@@ -419,8 +442,6 @@ button:disabled {
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  background: var(--genesis-primary);
-  color: #ffffff;
 }
 
 .date-number {
@@ -433,27 +454,77 @@ button:disabled {
 
 .date-events {
   display: grid;
+  grid-auto-rows: 26px;
   gap: 4px;
   min-width: 0;
 }
 
 .event-pill {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 26px;
+  min-height: 26px;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--genesis-border);
   border-radius: 4px;
   background: #f7f7f8;
   color: var(--genesis-text-primary);
-  padding: 4px 6px;
+  padding: 3px 4px;
   font-size: 12px;
   font-weight: 700;
+  text-align: left;
+}
+
+.event-pill:hover,
+.event-pill:focus-visible {
+  filter: brightness(0.94);
+  outline: 2px solid rgba(99, 102, 241, 0.32);
+  outline-offset: -2px;
+}
+
+.event-title {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.event-pill small {
-  display: none;
+.source-badge {
+  display: inline-flex;
+  width: fit-content;
+  flex: none;
+  align-items: center;
+  border: 1px solid var(--genesis-border);
+  border-radius: 9999px;
+  background: var(--genesis-surface);
+  color: var(--genesis-text-secondary);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.event-pill .source-badge {
+  max-width: 38px;
+  overflow: hidden;
+  padding: 2px 4px;
+  font-size: 9px;
+  text-overflow: ellipsis;
+}
+
+.source-personal {
+  border-color: rgba(99, 102, 241, 0.3);
+  color: var(--genesis-primary-hover);
+}
+
+.source-shared {
+  border-color: rgba(32, 151, 11, 0.32);
+  color: var(--genesis-secondary);
 }
 
 .more-count {
@@ -502,8 +573,21 @@ button:disabled {
   background: var(--genesis-surface);
 }
 
+.schedule-card:focus,
+.schedule-card.is-selected {
+  outline: none;
+  box-shadow: inset 3px 0 0 var(--genesis-primary);
+}
+
 .schedule-card:last-child {
   border-bottom: 0;
+}
+
+.schedule-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .schedule-card h3 {
@@ -541,6 +625,12 @@ button:disabled {
   margin: 12px 0 0;
   color: var(--genesis-text-secondary);
   line-height: 1.6;
+}
+
+.schedule-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .type-badge {
@@ -738,13 +828,7 @@ button:disabled {
   }
 
   .date-cell {
-    min-height: 126px;
-  }
-
-  .event-pill small {
-    display: inline;
-    margin-left: 6px;
-    color: rgba(255, 255, 255, 0.86);
+    height: 126px;
   }
 
   .schedule-card {
@@ -796,12 +880,10 @@ button:disabled {
   }
 
   .date-cell {
-    min-height: 82px;
-    padding: 6px;
+    height: 96px;
   }
 
   .event-pill {
-    padding: 3px 4px;
     font-size: 11px;
   }
 

@@ -1,13 +1,19 @@
 import { Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { ScheduleDraft, ScheduleType } from "../types";
+import { scheduleDraftSchema } from "../schemas/schedule";
+import type {
+  PersonalSchedule,
+  ScheduleDraft,
+  ScheduleType,
+} from "../types";
 import { SCHEDULE_TYPES, scheduleTypeLabels } from "../types";
 
 type ScheduleModalProps = {
-  isOpen: boolean;
-  defaultDueDate: string;
-  onClose: () => void;
-  onSave: (draft: ScheduleDraft) => void;
+  mode: "create" | "edit";
+  initialValue?: PersonalSchedule;
+  defaultDate?: string;
+  onCancel: () => void;
+  onSubmit: (draft: ScheduleDraft) => void;
 };
 
 const emptyForm = {
@@ -19,24 +25,29 @@ const emptyForm = {
 };
 
 export default function ScheduleModal({
-  isOpen,
-  defaultDueDate,
-  onClose,
-  onSave,
+  mode,
+  initialValue,
+  defaultDate = "",
+  onCancel,
+  onSubmit,
 }: ScheduleModalProps) {
   const [form, setForm] = useState(emptyForm);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    if (isOpen) {
-      setForm({ ...emptyForm, dueDate: defaultDueDate });
-      setErrorMessage("");
-    }
-  }, [defaultDueDate, isOpen]);
-
-  if (!isOpen) {
-    return null;
-  }
+    setForm(
+      initialValue
+        ? {
+            title: initialValue.title,
+            subject: initialValue.subject ?? "",
+            description: initialValue.description ?? "",
+            type: initialValue.type,
+            dueDate: initialValue.dueDate,
+          }
+        : { ...emptyForm, dueDate: defaultDate },
+    );
+    setErrorMessage("");
+  }, [defaultDate, initialValue, mode]);
 
   function updateField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -46,18 +57,17 @@ export default function ScheduleModal({
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!form.title.trim() || !form.type || !form.dueDate) {
-      setErrorMessage("제목, 유형, 마감일은 반드시 입력해야 합니다.");
+    const result = scheduleDraftSchema.safeParse(form);
+
+    if (!result.success) {
+      setErrorMessage(
+        result.error.issues[0]?.message ??
+          "입력한 일정 정보를 다시 확인해 주세요.",
+      );
       return;
     }
 
-    onSave({
-      title: form.title.trim(),
-      subject: form.subject.trim(),
-      description: form.description.trim(),
-      type: form.type,
-      dueDate: form.dueDate,
-    });
+    onSubmit(result.data);
   }
 
   return (
@@ -71,14 +81,16 @@ export default function ScheduleModal({
         <form onSubmit={handleSubmit}>
           <header className="modal-header">
             <div>
-              <p className="overline">New schedule</p>
-              <h2 id="schedule-modal-title">일정 추가</h2>
+              <p className="overline">PERSONAL SCHEDULE</p>
+              <h2 id="schedule-modal-title">
+                {mode === "create" ? "내 일정 추가" : "내 일정 수정"}
+              </h2>
             </div>
             <button
               type="button"
               className="icon-button"
-              onClick={onClose}
-              aria-label="일정 추가 닫기"
+              onClick={onCancel}
+              aria-label={`${mode === "create" ? "내 일정 추가" : "내 일정 수정"} 닫기`}
               title="닫기"
             >
               <X size={18} aria-hidden="true" />
@@ -141,7 +153,7 @@ export default function ScheduleModal({
           {errorMessage && <p className="form-error">{errorMessage}</p>}
 
           <footer className="modal-actions">
-            <button type="button" className="secondary-button" onClick={onClose}>
+            <button type="button" className="secondary-button" onClick={onCancel}>
               취소
             </button>
             <button type="submit" className="primary-button">

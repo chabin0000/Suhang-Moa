@@ -1,6 +1,14 @@
 import { CalendarPlus, RefreshCcw } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { Schedule, ScheduleDraft, SelectedClass, SummaryFilter } from "../types";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  CalendarItem,
+  PersonalSchedule,
+  ScheduleDraft,
+  SelectedClass,
+  SharedEvent,
+  SummaryFilter,
+} from "../types";
+import { getCalendarItemsForClass } from "../utils/calendarItems";
 import { getTodayKey, getTomorrowKey, isWithinNextDays, moveMonth } from "../utils/date";
 import { createScheduleId, getSchedules, saveSchedules } from "../utils/storage";
 import CalendarMonth from "./CalendarMonth";
@@ -10,78 +18,94 @@ import SummaryWidgets from "./SummaryWidgets";
 
 type ClassDashboardProps = {
   selectedClass: SelectedClass;
+  sharedEvents: SharedEvent[];
   onChangeClass: () => void;
 };
 
-type ModalState = {
-  isOpen: boolean;
-  dueDate: string;
-};
+type ModalState =
+  | { mode: "create"; defaultDate: string }
+  | { mode: "edit"; schedule: PersonalSchedule }
+  | null;
 
 export default function ClassDashboard({
   selectedClass,
+  sharedEvents,
   onChangeClass,
 }: ClassDashboardProps) {
-  const [allSchedules, setAllSchedules] = useState<Schedule[]>(() => getSchedules());
+  const [personalSchedules, setPersonalSchedules] = useState<PersonalSchedule[]>(
+    () => getSchedules(),
+  );
   const [activeMonth, setActiveMonth] = useState(() => new Date());
   const [activeFilter, setActiveFilter] = useState<SummaryFilter>(null);
-  const [modalState, setModalState] = useState<ModalState>({
-    isOpen: false,
-    dueDate: getTodayKey(),
-  });
+  const [modalState, setModalState] = useState<ModalState>(null);
+  const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
 
-  const classSchedules = useMemo(() => {
-    return allSchedules
-      .filter(
-        (schedule) =>
-          schedule.grade === selectedClass.grade &&
-          schedule.classNo === selectedClass.classNo,
-      )
-      .sort((left, right) => left.dueDate.localeCompare(right.dueDate));
-  }, [allSchedules, selectedClass.classNo, selectedClass.grade]);
+  const calendarItems = useMemo(
+    () =>
+      getCalendarItemsForClass(
+        personalSchedules,
+        sharedEvents,
+        selectedClass,
+      ),
+    [personalSchedules, selectedClass, sharedEvents],
+  );
 
   const summaryCounts = useMemo(() => {
     const todayKey = getTodayKey();
     const tomorrowKey = getTomorrowKey();
 
     return {
-      today: classSchedules.filter((schedule) => schedule.dueDate === todayKey).length,
-      tomorrow: classSchedules.filter((schedule) => schedule.dueDate === tomorrowKey)
+      today: calendarItems.filter((item) => item.dueDate === todayKey).length,
+      tomorrow: calendarItems.filter((item) => item.dueDate === tomorrowKey)
         .length,
-      week: classSchedules.filter((schedule) => isWithinNextDays(schedule.dueDate, 7))
+      week: calendarItems.filter((item) => isWithinNextDays(item.dueDate, 7))
         .length,
     };
-  }, [classSchedules]);
+  }, [calendarItems]);
 
-  const filteredSchedules = useMemo(() => {
+  const filteredItems = useMemo(() => {
     const todayKey = getTodayKey();
     const tomorrowKey = getTomorrowKey();
 
     if (activeFilter === "today") {
-      return classSchedules.filter((schedule) => schedule.dueDate === todayKey);
+      return calendarItems.filter((item) => item.dueDate === todayKey);
     }
 
     if (activeFilter === "tomorrow") {
-      return classSchedules.filter((schedule) => schedule.dueDate === tomorrowKey);
+      return calendarItems.filter((item) => item.dueDate === tomorrowKey);
     }
 
     if (activeFilter === "week") {
-      return classSchedules.filter((schedule) => isWithinNextDays(schedule.dueDate, 7));
+      return calendarItems.filter((item) => isWithinNextDays(item.dueDate, 7));
     }
 
-    return classSchedules;
-  }, [activeFilter, classSchedules]);
+    return calendarItems;
+  }, [activeFilter, calendarItems]);
 
-  function openScheduleModal(dueDate = getTodayKey()) {
-    setModalState({ isOpen: true, dueDate });
+  useEffect(() => {
+    if (!selectedItemKey) {
+      return;
+    }
+
+    const card = document.getElementById(`calendar-item-${selectedItemKey}`);
+    card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    card?.focus({ preventScroll: true });
+  }, [filteredItems, selectedItemKey]);
+
+  function openCreateModal(defaultDate = getTodayKey()) {
+    setModalState({ mode: "create", defaultDate });
+  }
+
+  function openEditModal(schedule: PersonalSchedule) {
+    setModalState({ mode: "edit", schedule });
   }
 
   function closeScheduleModal() {
-    setModalState((current) => ({ ...current, isOpen: false }));
+    setModalState(null);
   }
 
-  function handleSaveSchedule(draft: ScheduleDraft) {
-    const nextSchedule: Schedule = {
+  function addPersonalSchedule(draft: ScheduleDraft): void {
+    const nextSchedule: PersonalSchedule = {
       ...draft,
       source: "personal",
       id: createScheduleId(),
@@ -90,22 +114,52 @@ export default function ClassDashboard({
       createdAt: new Date().toISOString(),
     };
 
-    const nextSchedules = [...allSchedules, nextSchedule];
-    setAllSchedules(nextSchedules);
+    const nextSchedules = [...personalSchedules, nextSchedule];
+    setPersonalSchedules(nextSchedules);
     saveSchedules(nextSchedules);
     closeScheduleModal();
   }
 
-  function handleDeleteSchedule(scheduleId: string) {
+  function updatePersonalSchedule(id: string, draft: ScheduleDraft): void {
+    const nextSchedules = personalSchedules.map((schedule) =>
+      schedule.id === id
+        ? {
+            ...schedule,
+            ...draft,
+            updatedAt: new Date().toISOString(),
+          }
+        : schedule,
+    );
+
+    setPersonalSchedules(nextSchedules);
+    saveSchedules(nextSchedules);
+    closeScheduleModal();
+  }
+
+  function deletePersonalSchedule(id: string): void {
     const shouldDelete = window.confirm("이 일정을 삭제할까요?");
 
     if (!shouldDelete) {
       return;
     }
 
-    const nextSchedules = allSchedules.filter((schedule) => schedule.id !== scheduleId);
-    setAllSchedules(nextSchedules);
+    const nextSchedules = personalSchedules.filter((schedule) => schedule.id !== id);
+    setPersonalSchedules(nextSchedules);
     saveSchedules(nextSchedules);
+  }
+
+  function openCalendarItem(item: CalendarItem): void {
+    setActiveFilter(null);
+    setSelectedItemKey(`${item.source}:${item.id}`);
+  }
+
+  function submitModal(draft: ScheduleDraft): void {
+    if (modalState?.mode === "edit") {
+      updatePersonalSchedule(modalState.schedule.id, draft);
+      return;
+    }
+
+    addPersonalSchedule(draft);
   }
 
   return (
@@ -131,23 +185,26 @@ export default function ClassDashboard({
 
       <CalendarMonth
         activeMonth={activeMonth}
-        schedules={classSchedules}
+        items={calendarItems}
         onPrevMonth={() => setActiveMonth((current) => moveMonth(current, -1))}
         onNextMonth={() => setActiveMonth((current) => moveMonth(current, 1))}
-        onSelectDate={openScheduleModal}
+        onSelectDate={openCreateModal}
+        onSelectItem={openCalendarItem}
       />
 
       <ScheduleList
-        schedules={filteredSchedules}
+        items={filteredItems}
         activeFilter={activeFilter}
+        selectedItemKey={selectedItemKey}
         onClearFilter={() => setActiveFilter(null)}
-        onDeleteSchedule={handleDeleteSchedule}
+        onEditPersonal={openEditModal}
+        onDeletePersonal={deletePersonalSchedule}
       />
 
       <button
         type="button"
         className="floating-add-button"
-        onClick={() => openScheduleModal()}
+        onClick={() => openCreateModal()}
         aria-label="일정 추가"
         title="일정 추가"
       >
@@ -155,12 +212,19 @@ export default function ClassDashboard({
         일정 추가
       </button>
 
-      <ScheduleModal
-        isOpen={modalState.isOpen}
-        defaultDueDate={modalState.dueDate}
-        onClose={closeScheduleModal}
-        onSave={handleSaveSchedule}
-      />
+      {modalState && (
+        <ScheduleModal
+          mode={modalState.mode}
+          initialValue={
+            modalState.mode === "edit" ? modalState.schedule : undefined
+          }
+          defaultDate={
+            modalState.mode === "create" ? modalState.defaultDate : undefined
+          }
+          onCancel={closeScheduleModal}
+          onSubmit={submitModal}
+        />
+      )}
     </section>
   );
 }

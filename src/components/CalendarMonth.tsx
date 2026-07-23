@@ -1,29 +1,30 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { Schedule } from "../types";
-import { scheduleTypeLabels } from "../types";
+import type { CalendarItem } from "../types";
 import { getCalendarDays, getMonthLabel } from "../utils/date";
 
 type CalendarMonthProps = {
   activeMonth: Date;
-  schedules: Schedule[];
+  items: CalendarItem[];
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onSelectDate: (dateKey: string) => void;
+  onSelectItem: (item: CalendarItem) => void;
 };
 
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function CalendarMonth({
   activeMonth,
-  schedules,
+  items,
   onPrevMonth,
   onNextMonth,
   onSelectDate,
+  onSelectItem,
 }: CalendarMonthProps) {
   const calendarDays = getCalendarDays(activeMonth);
 
-  function schedulesForDate(dateKey: string) {
-    return schedules.filter((schedule) => schedule.dueDate === dateKey);
+  function itemsForDate(dateKey: string) {
+    return items.filter((item) => item.dueDate === dateKey);
   }
 
   return (
@@ -48,13 +49,13 @@ export default function CalendarMonth({
         ))}
 
         {calendarDays.map((day) => {
-          const daySchedules = schedulesForDate(day.dateKey);
-          const visibleSchedules = daySchedules.slice(0, 2);
+          const dayItems = itemsForDate(day.dateKey);
+          const visibleItems = dayItems.slice(0, 2);
 
           return (
-            <button
+            <div
               key={day.dateKey}
-              type="button"
+              role="gridcell"
               className={[
                 "date-cell",
                 day.isCurrentMonth ? "" : "is-muted",
@@ -62,22 +63,42 @@ export default function CalendarMonth({
               ]
                 .filter(Boolean)
                 .join(" ")}
-              onClick={() => onSelectDate(day.dateKey)}
-              title={`${day.dateKey} 일정 추가`}
             >
-              <span className="date-number">{day.dayNumber}</span>
-              <span className="date-events">
-                {visibleSchedules.map((schedule) => (
-                  <span key={schedule.id} className={`event-pill type-${schedule.type}`}>
-                    {schedule.title}
-                    <small>{scheduleTypeLabels[schedule.type]}</small>
-                  </span>
-                ))}
-                {daySchedules.length > 2 && (
-                  <span className="more-count">+{daySchedules.length - 2}</span>
+              <button
+                type="button"
+                className="date-number-button"
+                onClick={() => onSelectDate(day.dateKey)}
+                aria-label={`${day.dateKey} 일정 추가`}
+                title={`${day.dateKey} 일정 추가`}
+              >
+                <span className="date-number">{day.dayNumber}</span>
+              </button>
+              <div className="date-events">
+                {visibleItems.map((item) => {
+                  const sourceLabel =
+                    item.source === "personal" ? "내 일정" : "반 일정";
+
+                  return (
+                    <button
+                      key={`${item.source}:${item.id}`}
+                      type="button"
+                      className={`event-pill type-${item.type}`}
+                      onClick={() => onSelectItem(item)}
+                      aria-label={`${day.dateKey} ${item.title} ${sourceLabel} 열기`}
+                      title={`${item.title} · ${sourceLabel}`}
+                    >
+                      <span className="event-title">{item.title}</span>
+                      <small className={`source-badge source-${item.source}`}>
+                        {sourceLabel}
+                      </small>
+                    </button>
+                  );
+                })}
+                {dayItems.length > 2 && (
+                  <span className="more-count">+{dayItems.length - 2}</span>
                 )}
-              </span>
-            </button>
+              </div>
+            </div>
           );
         })}
       </div>
