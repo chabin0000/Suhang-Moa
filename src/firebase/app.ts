@@ -15,8 +15,13 @@ import {
 } from "firebase/firestore";
 
 import { initializeWebAppCheck } from "./appCheck";
-import { getFirebaseClientState, type FirebaseRuntime } from "./clientState";
 import {
+  createFirebaseRuntimeIdentity,
+  getFirebaseClientState,
+  type FirebaseRuntime,
+} from "./clientState";
+import {
+  FirebaseClientError,
   readFirebaseConfig,
   toFirebaseClientError,
   type FirebasePublicConfig,
@@ -34,7 +39,25 @@ function toFirebaseOptions(config: FirebasePublicConfig): FirebaseOptions {
 }
 
 function getFirebaseRuntime(): FirebaseRuntime | null {
+  // cache를 확인하기 전에 현재 bundle의 환경 정책을 항상 검증한다.
+  const configState = readFirebaseConfig(import.meta.env, import.meta.env.MODE);
+  if (!configState.enabled) {
+    return null;
+  }
+
   const state = getFirebaseClientState();
+  const currentIdentity = createFirebaseRuntimeIdentity(
+    configState.value,
+    import.meta.env.MODE,
+  );
+
+  if (
+    state.runtimeIdentity !== undefined &&
+    state.runtimeIdentity !== currentIdentity
+  ) {
+    throw new FirebaseClientError("FIREBASE_CONFIG_MISMATCH");
+  }
+  state.runtimeIdentity = currentIdentity;
 
   if (state.runtime !== undefined) {
     return state.runtime;
@@ -44,13 +67,7 @@ function getFirebaseRuntime(): FirebaseRuntime | null {
   }
 
   try {
-    // 환경값 파싱과 SDK 초기화는 첫 getter 호출 전에는 실행하지 않는다.
-    const configState = readFirebaseConfig(import.meta.env, import.meta.env.MODE);
-    if (!configState.enabled) {
-      state.runtime = null;
-      return state.runtime;
-    }
-
+    // Firebase SDK 호출은 첫 getter 호출 전에는 실행하지 않는다.
     const app = initializeApp(toFirebaseOptions(configState.value));
     state.runtime = { app, config: configState.value };
     return state.runtime;
@@ -68,18 +85,17 @@ export function getFirebaseApp(): FirebaseApp | null {
 }
 
 export function getFirebaseAuth(): Auth | null {
-  const state = getFirebaseClientState();
+  const currentRuntime = getFirebaseRuntime();
+  if (!currentRuntime) {
+    return null;
+  }
 
+  const state = getFirebaseClientState();
   if (state.auth) {
     return state.auth;
   }
   if (state.authError) {
     throw state.authError;
-  }
-
-  const currentRuntime = getFirebaseRuntime();
-  if (!currentRuntime) {
-    return null;
   }
 
   try {
@@ -101,18 +117,17 @@ export function getFirebaseAuth(): Auth | null {
 }
 
 export function getFirestoreDb(): Firestore | null {
-  const state = getFirebaseClientState();
+  const currentRuntime = getFirebaseRuntime();
+  if (!currentRuntime) {
+    return null;
+  }
 
+  const state = getFirebaseClientState();
   if (state.firestore) {
     return state.firestore;
   }
   if (state.firestoreError) {
     throw state.firestoreError;
-  }
-
-  const currentRuntime = getFirebaseRuntime();
-  if (!currentRuntime) {
-    return null;
   }
 
   try {

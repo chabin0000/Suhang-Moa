@@ -13,19 +13,62 @@ export interface FirebaseRuntime {
   config: FirebasePublicConfig;
 }
 
+export type AppCheckClientState =
+  | {
+      identity: string;
+      status: "ready";
+      value: AppCheck | null;
+    }
+  | {
+      identity: string;
+      status: "failed";
+      error: FirebaseClientError;
+    };
+
 export interface FirebaseClientState {
+  runtimeIdentity?: string;
   runtime?: FirebaseRuntime | null;
   runtimeError?: FirebaseClientError;
   auth?: Auth;
   authError?: FirebaseClientError;
   firestore?: Firestore;
   firestoreError?: FirebaseClientError;
-  appChecks: WeakMap<FirebaseApp, AppCheck>;
+  appChecks: WeakMap<FirebaseApp, AppCheckClientState>;
 }
 
 const FIREBASE_CLIENT_STATE_KEY = Symbol.for(
-  "suhang-moa.firebase.client-state.v1",
+  "suhang-moa.firebase.client-state.v2",
 );
+
+export function createFirebaseRuntimeIdentity(
+  config: FirebasePublicConfig,
+  mode: string,
+): string {
+  return JSON.stringify([
+    "suhang-moa/firebase-runtime/v1",
+    mode,
+    config.apiKey,
+    config.authDomain,
+    config.projectId,
+    config.storageBucket,
+    config.messagingSenderId,
+    config.appId,
+    config.recaptchaEnterpriseSiteKey,
+    config.useEmulators,
+    config.appCheckDebug,
+  ]);
+}
+
+export function createAppCheckIdentity(
+  config: FirebasePublicConfig,
+): string {
+  return JSON.stringify([
+    "suhang-moa/app-check/v1",
+    config.recaptchaEnterpriseSiteKey,
+    config.useEmulators,
+    config.appCheckDebug,
+  ]);
+}
 
 export function getFirebaseClientState(): FirebaseClientState {
   const stateHost = globalThis as typeof globalThis & Record<symbol, unknown>;
@@ -38,7 +81,7 @@ export function getFirebaseClientState(): FirebaseClientState {
   }
 
   const state: FirebaseClientState = {
-    appChecks: new WeakMap<FirebaseApp, AppCheck>(),
+    appChecks: new WeakMap<FirebaseApp, AppCheckClientState>(),
   };
   stateHost[FIREBASE_CLIENT_STATE_KEY] = state;
   return state;

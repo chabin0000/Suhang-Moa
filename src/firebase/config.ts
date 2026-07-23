@@ -24,6 +24,7 @@ export interface FirebasePublicConfig {
 
 export type FirebaseClientErrorCode =
   | "APPCHECK_DEBUG_FORBIDDEN"
+  | "APPCHECK_CONFIG_MISMATCH"
   | "APPCHECK_INITIALIZATION_FAILED"
   | "AUTH_ADMIN_SESSION_ACTIVE"
   | "AUTH_ADMIN_SIGN_IN_FAILED"
@@ -31,12 +32,15 @@ export type FirebaseClientErrorCode =
   | "AUTH_SIGN_OUT_FAILED"
   | "AUTH_SUBSCRIPTION_FAILED"
   | "FIREBASE_INITIALIZATION_FAILED"
+  | "FIREBASE_CONFIG_MISMATCH"
   | "FIREBASE_SERVICE_INITIALIZATION_FAILED"
   | "FIREBASE_UNAVAILABLE";
 
 const FIREBASE_CLIENT_ERROR_MESSAGES = {
   APPCHECK_DEBUG_FORBIDDEN:
     "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
+  APPCHECK_CONFIG_MISMATCH:
+    "App Check 설정 충돌이 감지되었습니다. 페이지를 새로고침해 주세요.",
   APPCHECK_INITIALIZATION_FAILED: "App Check를 초기화하지 못했습니다.",
   AUTH_ADMIN_SESSION_ACTIVE:
     "관리자 로그아웃 후 학생 제출을 다시 시도해 주세요.",
@@ -46,6 +50,8 @@ const FIREBASE_CLIENT_ERROR_MESSAGES = {
     "학생 인증에 실패했습니다. 잠시 후 다시 시도해 주세요.",
   AUTH_SIGN_OUT_FAILED: "로그아웃에 실패했습니다. 다시 시도해 주세요.",
   AUTH_SUBSCRIPTION_FAILED: "로그인 상태를 확인하지 못했습니다.",
+  FIREBASE_CONFIG_MISMATCH:
+    "Firebase 설정 충돌이 감지되었습니다. 페이지를 새로고침해 주세요.",
   FIREBASE_INITIALIZATION_FAILED: "공유 일정 기능을 초기화하지 못했습니다.",
   FIREBASE_SERVICE_INITIALIZATION_FAILED:
     "공유 일정 기능에 연결하지 못했습니다.",

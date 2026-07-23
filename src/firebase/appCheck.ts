@@ -5,8 +5,12 @@ import {
 } from "firebase/app-check";
 import type { FirebaseApp } from "firebase/app";
 
-import { getFirebaseClientState } from "./clientState";
 import {
+  createAppCheckIdentity,
+  getFirebaseClientState,
+} from "./clientState";
+import {
+  FirebaseClientError,
   toFirebaseClientError,
   type FirebasePublicConfig,
 } from "./config";
@@ -15,14 +19,27 @@ export function initializeWebAppCheck(
   app: FirebaseApp,
   config: FirebasePublicConfig,
 ): AppCheck | null {
-  if (config.useEmulators) {
-    return null;
+  const state = getFirebaseClientState();
+  const currentIdentity = createAppCheckIdentity(config);
+  const existing = state.appChecks.get(app);
+
+  if (existing) {
+    if (existing.identity !== currentIdentity) {
+      throw new FirebaseClientError("APPCHECK_CONFIG_MISMATCH");
+    }
+    if (existing.status === "failed") {
+      throw existing.error;
+    }
+    return existing.value;
   }
 
-  const state = getFirebaseClientState();
-  const existing = state.appChecks.get(app);
-  if (existing) {
-    return existing;
+  if (config.useEmulators) {
+    state.appChecks.set(app, {
+      identity: currentIdentity,
+      status: "ready",
+      value: null,
+    });
+    return null;
   }
 
   try {
@@ -41,9 +58,22 @@ export function initializeWebAppCheck(
       ),
       isTokenAutoRefreshEnabled: true,
     });
-    state.appChecks.set(app, appCheck);
+    state.appChecks.set(app, {
+      identity: currentIdentity,
+      status: "ready",
+      value: appCheck,
+    });
     return appCheck;
   } catch (error) {
-    throw toFirebaseClientError(error, "APPCHECK_INITIALIZATION_FAILED");
+    const safeError = toFirebaseClientError(
+      error,
+      "APPCHECK_INITIALIZATION_FAILED",
+    );
+    state.appChecks.set(app, {
+      identity: currentIdentity,
+      status: "failed",
+      error: safeError,
+    });
+    throw safeError;
   }
 }

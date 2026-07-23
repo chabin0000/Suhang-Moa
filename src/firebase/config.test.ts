@@ -114,9 +114,10 @@ const EXPECTED_FIREBASE_OPTIONS = {
   appId: "1:1234567890:web:abcdef",
 };
 
-const FIREBASE_CLIENT_STATE_KEY = Symbol.for(
-  "suhang-moa.firebase.client-state.v1",
-);
+const FIREBASE_CLIENT_STATE_KEYS = [
+  Symbol.for("suhang-moa.firebase.client-state.v1"),
+  Symbol.for("suhang-moa.firebase.client-state.v2"),
+];
 
 function makeEnv(
   overrides: Record<string, string | boolean | undefined> = {},
@@ -164,7 +165,9 @@ function clearDebugToken(): void {
 
 function clearFirebaseClientState(): void {
   const stateHost = globalThis as typeof globalThis & Record<symbol, unknown>;
-  delete stateHost[FIREBASE_CLIENT_STATE_KEY];
+  for (const key of FIREBASE_CLIENT_STATE_KEYS) {
+    delete stateHost[key];
+  }
 }
 
 function seedMockFirebaseApp(
@@ -492,7 +495,7 @@ describe("lazy Firebase initialization policy", () => {
     expect(getDebugToken()).toBeUndefined();
   });
 
-  it("keeps emulator connectors idempotent across module re-evaluation", async () => {
+  it("reuses the same runtime identity across module re-evaluation", async () => {
     stubRuntimeEnv({ VITE_USE_FIREBASE_EMULATORS: "true" });
     const firstBoundary = await import("./app");
 
@@ -507,6 +510,68 @@ describe("lazy Firebase initialization policy", () => {
     expect(firebaseSdk.initializeApp).toHaveBeenCalledTimes(1);
     expect(firebaseSdk.connectAuthEmulator).toHaveBeenCalledTimes(1);
     expect(firebaseSdk.connectFirestoreEmulator).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a changed Firebase project after module re-evaluation", async () => {
+    stubRuntimeEnv({
+      VITE_FIREBASE_PROJECT_ID: "must-not-leak-project-a",
+    });
+    const firstBoundary = await import("./app");
+
+    expect(firstBoundary.getFirebaseApp()).toBe(firebaseSdk.app);
+
+    vi.resetModules();
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", "must-not-leak-project-b");
+    const reloadedBoundary = await import("./app");
+    const error = captureThrown(reloadedBoundary.getFirebaseApp);
+
+    expect(error).toMatchObject({
+      code: "FIREBASE_CONFIG_MISMATCH",
+      message:
+        "Firebase 설정 충돌이 감지되었습니다. 페이지를 새로고침해 주세요.",
+    });
+    expect(String(error)).not.toContain("must-not-leak-project-a");
+    expect(String(error)).not.toContain("must-not-leak-project-b");
+    expect(firebaseSdk.initializeApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null for disabled current config despite a cached runtime", async () => {
+    stubRuntimeEnv({ VITE_USE_FIREBASE_EMULATORS: "true" });
+    const firstBoundary = await import("./app");
+
+    expect(firstBoundary.getFirebaseApp()).toBe(firebaseSdk.app);
+    expect(firstBoundary.getFirebaseAuth()).toBe(firebaseSdk.auth);
+    expect(firstBoundary.getFirestoreDb()).toBe(firebaseSdk.firestore);
+
+    vi.resetModules();
+    vi.stubEnv("VITE_FIREBASE_PROJECT_ID", undefined);
+    const reloadedBoundary = await import("./app");
+
+    expect(reloadedBoundary.getFirebaseApp()).toBeNull();
+    expect(reloadedBoundary.getFirebaseAuth()).toBeNull();
+    expect(reloadedBoundary.getFirestoreDb()).toBeNull();
+    expect(firebaseSdk.initializeApp).toHaveBeenCalledTimes(1);
+    expect(firebaseSdk.connectAuthEmulator).toHaveBeenCalledTimes(1);
+    expect(firebaseSdk.connectFirestoreEmulator).toHaveBeenCalledTimes(1);
+  });
+
+  it("validates production debug mode before using a cached runtime", async () => {
+    stubRuntimeEnv();
+    const firstBoundary = await import("./app");
+
+    expect(firstBoundary.getFirebaseApp()).toBe(firebaseSdk.app);
+
+    vi.resetModules();
+    vi.stubEnv("MODE", "production");
+    vi.stubEnv("VITE_APPCHECK_DEBUG", "true");
+    const reloadedBoundary = await import("./app");
+    const error = captureThrown(reloadedBoundary.getFirebaseApp);
+
+    expect(error).toMatchObject({
+      code: "APPCHECK_DEBUG_FORBIDDEN",
+      message: "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
+    });
+    expect(firebaseSdk.initializeApp).toHaveBeenCalledTimes(1);
   });
 
   it("keeps App Check idempotent across module re-evaluation", async () => {
@@ -529,6 +594,65 @@ describe("lazy Firebase initialization policy", () => {
     ).toBe(firebaseSdk.appCheck);
     expect(firebaseSdk.initializeAppCheck).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    {
+      label: "site key",
+      overrides: {
+        VITE_RECAPTCHA_ENTERPRISE_SITE_KEY: "must-not-leak-site-key-b",
+      },
+    },
+    {
+      label: "debug flag",
+      overrides: { VITE_APPCHECK_DEBUG: "true" },
+    },
+    {
+      label: "emulator flag",
+      overrides: { VITE_USE_FIREBASE_EMULATORS: "true" },
+    },
+  ])(
+    "rejects a changed App Check $label after module re-evaluation",
+    async ({ overrides }) => {
+      const initialConfig = readFirebaseConfig(makeEnv(), "development");
+      const firstBoundary = await import("./appCheck");
+
+      if (!initialConfig.enabled) {
+        throw new Error("expected enabled Firebase config");
+      }
+      expect(
+        firstBoundary.initializeWebAppCheck(
+          firebaseSdk.app,
+          initialConfig.value,
+        ),
+      ).toBe(firebaseSdk.appCheck);
+
+      vi.resetModules();
+      const changedConfig = readFirebaseConfig(
+        makeEnv(overrides),
+        "development",
+      );
+      const reloadedBoundary = await import("./appCheck");
+
+      if (!changedConfig.enabled) {
+        throw new Error("expected changed Firebase config");
+      }
+      const error = captureThrown(() => {
+        reloadedBoundary.initializeWebAppCheck(
+          firebaseSdk.app,
+          changedConfig.value,
+        );
+      });
+
+      expect(error).toMatchObject({
+        code: "APPCHECK_CONFIG_MISMATCH",
+        message:
+          "App Check 설정 충돌이 감지되었습니다. 페이지를 새로고침해 주세요.",
+      });
+      expect(String(error)).not.toContain("public-site-key");
+      expect(String(error)).not.toContain("must-not-leak-site-key-b");
+      expect(firebaseSdk.initializeAppCheck).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("retrieves an identical existing default app through initializeApp", async () => {
     stubRuntimeEnv();
