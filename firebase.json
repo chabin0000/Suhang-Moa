@@ -10,6 +10,7 @@
         "oAuthBrandDisplayName": "Suhang Moa",
         "supportEmail": "chabin0960@gmail.com",
         "authorizedRedirectUris": [
+          "https://suhang-moa-2026.web.app",
           "https://chabin0000.github.io"
         ]
       }
