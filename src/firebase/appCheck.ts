@@ -5,12 +5,11 @@ import {
 } from "firebase/app-check";
 import type { FirebaseApp } from "firebase/app";
 
+import { getFirebaseClientState } from "./clientState";
 import {
   toFirebaseClientError,
   type FirebasePublicConfig,
 } from "./config";
-
-const initializedAppChecks = new WeakMap<FirebaseApp, AppCheck>();
 
 export function initializeWebAppCheck(
   app: FirebaseApp,
@@ -20,7 +19,8 @@ export function initializeWebAppCheck(
     return null;
   }
 
-  const existing = initializedAppChecks.get(app);
+  const state = getFirebaseClientState();
+  const existing = state.appChecks.get(app);
   if (existing) {
     return existing;
   }
@@ -41,7 +41,7 @@ export function initializeWebAppCheck(
       ),
       isTokenAutoRefreshEnabled: true,
     });
-    initializedAppChecks.set(app, appCheck);
+    state.appChecks.set(app, appCheck);
     return appCheck;
   } catch (error) {
     throw toFirebaseClientError(error, "APPCHECK_INITIALIZATION_FAILED");

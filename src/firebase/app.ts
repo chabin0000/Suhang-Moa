@@ -1,6 +1,4 @@
 import {
-  getApp,
-  getApps,
   initializeApp,
   type FirebaseApp,
   type FirebaseOptions,
@@ -17,24 +15,12 @@ import {
 } from "firebase/firestore";
 
 import { initializeWebAppCheck } from "./appCheck";
+import { getFirebaseClientState, type FirebaseRuntime } from "./clientState";
 import {
   readFirebaseConfig,
   toFirebaseClientError,
-  type FirebaseClientError,
   type FirebasePublicConfig,
 } from "./config";
-
-interface FirebaseRuntime {
-  app: FirebaseApp;
-  config: FirebasePublicConfig;
-}
-
-let runtime: FirebaseRuntime | null | undefined;
-let runtimeError: FirebaseClientError | undefined;
-let auth: Auth | undefined;
-let authError: FirebaseClientError | undefined;
-let firestore: Firestore | undefined;
-let firestoreError: FirebaseClientError | undefined;
 
 function toFirebaseOptions(config: FirebasePublicConfig): FirebaseOptions {
   return {
@@ -48,33 +34,32 @@ function toFirebaseOptions(config: FirebasePublicConfig): FirebaseOptions {
 }
 
 function getFirebaseRuntime(): FirebaseRuntime | null {
-  if (runtime !== undefined) {
-    return runtime;
+  const state = getFirebaseClientState();
+
+  if (state.runtime !== undefined) {
+    return state.runtime;
   }
-  if (runtimeError) {
-    throw runtimeError;
+  if (state.runtimeError) {
+    throw state.runtimeError;
   }
 
   try {
     // 환경값 파싱과 SDK 초기화는 첫 getter 호출 전에는 실행하지 않는다.
     const configState = readFirebaseConfig(import.meta.env, import.meta.env.MODE);
     if (!configState.enabled) {
-      runtime = null;
-      return runtime;
+      state.runtime = null;
+      return state.runtime;
     }
 
-    const app =
-      getApps().length > 0
-        ? getApp()
-        : initializeApp(toFirebaseOptions(configState.value));
-    runtime = { app, config: configState.value };
-    return runtime;
+    const app = initializeApp(toFirebaseOptions(configState.value));
+    state.runtime = { app, config: configState.value };
+    return state.runtime;
   } catch (error) {
-    runtimeError = toFirebaseClientError(
+    state.runtimeError = toFirebaseClientError(
       error,
       "FIREBASE_INITIALIZATION_FAILED",
     );
-    throw runtimeError;
+    throw state.runtimeError;
   }
 }
 
@@ -83,11 +68,13 @@ export function getFirebaseApp(): FirebaseApp | null {
 }
 
 export function getFirebaseAuth(): Auth | null {
-  if (auth) {
-    return auth;
+  const state = getFirebaseClientState();
+
+  if (state.auth) {
+    return state.auth;
   }
-  if (authError) {
-    throw authError;
+  if (state.authError) {
+    throw state.authError;
   }
 
   const currentRuntime = getFirebaseRuntime();
@@ -102,23 +89,25 @@ export function getFirebaseAuth(): Auth | null {
         disableWarnings: true,
       });
     }
-    auth = nextAuth;
-    return auth;
+    state.auth = nextAuth;
+    return state.auth;
   } catch (error) {
-    authError = toFirebaseClientError(
+    state.authError = toFirebaseClientError(
       error,
       "FIREBASE_SERVICE_INITIALIZATION_FAILED",
     );
-    throw authError;
+    throw state.authError;
   }
 }
 
 export function getFirestoreDb(): Firestore | null {
-  if (firestore) {
-    return firestore;
+  const state = getFirebaseClientState();
+
+  if (state.firestore) {
+    return state.firestore;
   }
-  if (firestoreError) {
-    throw firestoreError;
+  if (state.firestoreError) {
+    throw state.firestoreError;
   }
 
   const currentRuntime = getFirebaseRuntime();
@@ -135,13 +124,13 @@ export function getFirestoreDb(): Firestore | null {
     if (currentRuntime.config.useEmulators) {
       connectFirestoreEmulator(nextFirestore, "127.0.0.1", 8080);
     }
-    firestore = nextFirestore;
-    return firestore;
+    state.firestore = nextFirestore;
+    return state.firestore;
   } catch (error) {
-    firestoreError = toFirebaseClientError(
+    state.firestoreError = toFirebaseClientError(
       error,
       "FIREBASE_SERVICE_INITIALIZATION_FAILED",
     );
-    throw firestoreError;
+    throw state.firestoreError;
   }
 }

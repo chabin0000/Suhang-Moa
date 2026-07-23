@@ -14,6 +14,11 @@ const firebaseSdk = vi.hoisted(() => {
     options: {},
     automaticDataCollectionEnabled: false,
   };
+  const namedApp = {
+    name: "named-app",
+    options: {},
+    automaticDataCollectionEnabled: false,
+  };
   const auth = {
     name: "test-auth",
     currentUser: null as { uid: string; isAnonymous: boolean } | null,
@@ -23,15 +28,24 @@ const firebaseSdk = vi.hoisted(() => {
   const appCheck = { name: "test-app-check" };
   const localPersistence = { type: "LOCAL" };
   const googleProvider = { providerId: "google.com" };
+  const apps = new Map<
+    string,
+    {
+      app: typeof app;
+      options: Record<string, unknown>;
+    }
+  >();
 
   return {
     callOrder,
     app,
+    namedApp,
     auth,
     firestore,
     appCheck,
     localPersistence,
     googleProvider,
+    apps,
     debugTokenAtInitialization: undefined as boolean | string | undefined,
     initializeApp: vi.fn(),
     getApps: vi.fn(),
@@ -91,6 +105,19 @@ const COMPLETE_ENV = {
   VITE_APPCHECK_DEBUG: "false",
 } satisfies Record<string, string>;
 
+const EXPECTED_FIREBASE_OPTIONS = {
+  apiKey: "public-api-key",
+  authDomain: "suhang-moa.firebaseapp.com",
+  projectId: "suhang-moa",
+  storageBucket: "suhang-moa.firebasestorage.app",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:abcdef",
+};
+
+const FIREBASE_CLIENT_STATE_KEY = Symbol.for(
+  "suhang-moa.firebase.client-state.v1",
+);
+
 function makeEnv(
   overrides: Record<string, string | boolean | undefined> = {},
 ): ImportMetaEnv {
@@ -135,19 +162,84 @@ function clearDebugToken(): void {
   ).FIREBASE_APPCHECK_DEBUG_TOKEN;
 }
 
+function clearFirebaseClientState(): void {
+  const stateHost = globalThis as typeof globalThis & Record<symbol, unknown>;
+  delete stateHost[FIREBASE_CLIENT_STATE_KEY];
+}
+
+function seedMockFirebaseApp(
+  name: string,
+  app: typeof firebaseSdk.app,
+  options: Record<string, unknown>,
+): void {
+  firebaseSdk.apps.set(name, { app, options });
+}
+
+function captureThrown(command: () => unknown): unknown {
+  try {
+    command();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected command to throw");
+}
+
+async function captureRejection(
+  command: () => Promise<unknown>,
+): Promise<unknown> {
+  try {
+    await command();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected command to reject");
+}
+
 beforeEach(() => {
   vi.resetModules();
   vi.unstubAllEnvs();
   clearDebugToken();
+  clearFirebaseClientState();
   firebaseSdk.callOrder.length = 0;
   firebaseSdk.debugTokenAtInitialization = undefined;
+  firebaseSdk.apps.clear();
 
-  firebaseSdk.initializeApp.mockReset().mockImplementation(() => {
-    firebaseSdk.callOrder.push("initializeApp");
-    return firebaseSdk.app;
-  });
-  firebaseSdk.getApps.mockReset().mockReturnValue([]);
-  firebaseSdk.getApp.mockReset().mockReturnValue(firebaseSdk.app);
+  firebaseSdk.initializeApp
+    .mockReset()
+    .mockImplementation((options, name = "[DEFAULT]") => {
+      firebaseSdk.callOrder.push("initializeApp");
+      const existing = firebaseSdk.apps.get(name);
+
+      if (existing) {
+        if (JSON.stringify(existing.options) === JSON.stringify(options)) {
+          return existing.app;
+        }
+        throw new Error(
+          `Firebase duplicate-app: ${JSON.stringify({
+            existing: existing.options,
+            requested: options,
+          })}`,
+        );
+      }
+
+      const app = name === "[DEFAULT]" ? firebaseSdk.app : firebaseSdk.namedApp;
+      firebaseSdk.apps.set(name, { app, options });
+      return app;
+    });
+  firebaseSdk.getApps
+    .mockReset()
+    .mockImplementation(() =>
+      Array.from(firebaseSdk.apps.values(), ({ app }) => app),
+    );
+  firebaseSdk.getApp
+    .mockReset()
+    .mockImplementation((name = "[DEFAULT]") => {
+      const existing = firebaseSdk.apps.get(name);
+      if (!existing) {
+        throw new Error(`Firebase: no app named ${name}`);
+      }
+      return existing.app;
+    });
   firebaseSdk.getAuth.mockReset().mockImplementation(() => {
     firebaseSdk.callOrder.push("getAuth");
     return firebaseSdk.auth;
@@ -184,6 +276,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   clearDebugToken();
+  clearFirebaseClientState();
 });
 
 describe("Firebase public configuration", () => {
@@ -241,19 +334,16 @@ describe("Firebase public configuration", () => {
         "production",
       );
 
-    expect(read).toThrow(FirebaseClientError);
+    const error = captureThrown(read);
 
-    try {
-      read();
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: "APPCHECK_DEBUG_FORBIDDEN",
-        message: "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
-      });
-      expect(String(error)).not.toContain("must-not-leak-api-key");
-      expect(String(error)).not.toContain("VITE_FIREBASE");
-      expect(String(error)).not.toContain("{");
-    }
+    expect(error).toBeInstanceOf(FirebaseClientError);
+    expect(error).toMatchObject({
+      code: "APPCHECK_DEBUG_FORBIDDEN",
+      message: "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
+    });
+    expect(String(error)).not.toContain("must-not-leak-api-key");
+    expect(String(error)).not.toContain("VITE_FIREBASE");
+    expect(String(error)).not.toContain("{");
   });
 
   it("rejects production debug mode before validating the remaining config", () => {
@@ -266,10 +356,13 @@ describe("Firebase public configuration", () => {
         "production",
       );
 
-    expect(read).toThrow(FirebaseClientError);
-    expect(read).toThrow(
-      "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
-    );
+    const error = captureThrown(read);
+
+    expect(error).toBeInstanceOf(FirebaseClientError);
+    expect(error).toMatchObject({
+      code: "APPCHECK_DEBUG_FORBIDDEN",
+      message: "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
+    });
   });
 
   it("does not expose a debug-token environment key", () => {
@@ -302,21 +395,15 @@ describe("CI production configuration guard", () => {
       VITE_FIREBASE_PROJECT_ID: "   ",
     });
 
-    expect(() =>
-      assertFirebaseEnvForCiProduction(env, "production", "true"),
-    ).toThrow(
+    const error = captureThrown(() => {
+      assertFirebaseEnvForCiProduction(env, "production", "true");
+    });
+
+    expect((error as Error).message).toBe(
       "VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID",
     );
-
-    try {
-      assertFirebaseEnvForCiProduction(env, "production", "true");
-    } catch (error) {
-      expect((error as Error).message).toBe(
-        "VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID",
-      );
-      expect(String(error)).not.toContain("public-site-key");
-      expect(String(error)).not.toContain("suhang-moa");
-    }
+    expect(String(error)).not.toContain("public-site-key");
+    expect(String(error)).not.toContain("suhang-moa");
   });
 });
 
@@ -366,9 +453,12 @@ describe("lazy Firebase initialization policy", () => {
     });
     const { getFirebaseApp } = await import("./app");
 
-    expect(() => getFirebaseApp()).toThrow(
-      "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
-    );
+    const error = captureThrown(getFirebaseApp);
+
+    expect(error).toMatchObject({
+      code: "APPCHECK_DEBUG_FORBIDDEN",
+      message: "운영 환경에서는 App Check 디버그 모드를 사용할 수 없습니다.",
+    });
     expect(firebaseSdk.initializeApp).not.toHaveBeenCalled();
     expect(firebaseSdk.initializeAppCheck).not.toHaveBeenCalled();
   });
@@ -402,36 +492,101 @@ describe("lazy Firebase initialization policy", () => {
     expect(getDebugToken()).toBeUndefined();
   });
 
-  it("reuses an existing Firebase app and remains idempotent", async () => {
+  it("keeps emulator connectors idempotent across module re-evaluation", async () => {
+    stubRuntimeEnv({ VITE_USE_FIREBASE_EMULATORS: "true" });
+    const firstBoundary = await import("./app");
+
+    expect(firstBoundary.getFirebaseAuth()).toBe(firebaseSdk.auth);
+    expect(firstBoundary.getFirestoreDb()).toBe(firebaseSdk.firestore);
+
+    vi.resetModules();
+    const reloadedBoundary = await import("./app");
+
+    expect(reloadedBoundary.getFirebaseAuth()).toBe(firebaseSdk.auth);
+    expect(reloadedBoundary.getFirestoreDb()).toBe(firebaseSdk.firestore);
+    expect(firebaseSdk.initializeApp).toHaveBeenCalledTimes(1);
+    expect(firebaseSdk.connectAuthEmulator).toHaveBeenCalledTimes(1);
+    expect(firebaseSdk.connectFirestoreEmulator).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps App Check idempotent across module re-evaluation", async () => {
+    const config = readFirebaseConfig(makeEnv(), "production");
+    const firstBoundary = await import("./appCheck");
+
+    if (!config.enabled) {
+      throw new Error("expected enabled Firebase config");
+    }
+
+    expect(
+      firstBoundary.initializeWebAppCheck(firebaseSdk.app, config.value),
+    ).toBe(firebaseSdk.appCheck);
+
+    vi.resetModules();
+    const reloadedBoundary = await import("./appCheck");
+
+    expect(
+      reloadedBoundary.initializeWebAppCheck(firebaseSdk.app, config.value),
+    ).toBe(firebaseSdk.appCheck);
+    expect(firebaseSdk.initializeAppCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it("retrieves an identical existing default app through initializeApp", async () => {
     stubRuntimeEnv();
-    firebaseSdk.getApps.mockReturnValue([firebaseSdk.app]);
+    seedMockFirebaseApp(
+      "[DEFAULT]",
+      firebaseSdk.app,
+      EXPECTED_FIREBASE_OPTIONS,
+    );
     const { getFirebaseApp } = await import("./app");
 
     expect(getFirebaseApp()).toBe(firebaseSdk.app);
     expect(getFirebaseApp()).toBe(firebaseSdk.app);
-    expect(firebaseSdk.getApp).toHaveBeenCalledTimes(1);
-    expect(firebaseSdk.initializeApp).not.toHaveBeenCalled();
+    expect(firebaseSdk.initializeApp).toHaveBeenCalledTimes(1);
+    expect(firebaseSdk.initializeApp).toHaveBeenCalledWith(
+      EXPECTED_FIREBASE_OPTIONS,
+    );
+    expect(firebaseSdk.getApps).not.toHaveBeenCalled();
+    expect(firebaseSdk.getApp).not.toHaveBeenCalled();
   });
 
-  it("replaces raw Firebase initialization errors with a UI-safe error", async () => {
+  it("maps a mismatched default app to a UI-safe error", async () => {
     stubRuntimeEnv();
-    firebaseSdk.initializeApp.mockImplementation(() => {
-      throw new Error(JSON.stringify(COMPLETE_ENV));
+    seedMockFirebaseApp("[DEFAULT]", firebaseSdk.app, {
+      ...EXPECTED_FIREBASE_OPTIONS,
+      projectId: "must-not-leak-other-project",
     });
     const { getFirebaseApp } = await import("./app");
 
-    try {
-      getFirebaseApp();
-      throw new Error("expected getFirebaseApp to throw");
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: "FIREBASE_INITIALIZATION_FAILED",
-        message: "공유 일정 기능을 초기화하지 못했습니다.",
-      });
-      expect(String(error)).not.toContain("public-api-key");
-      expect(String(error)).not.toContain("public-site-key");
-      expect(String(error)).not.toContain("VITE_FIREBASE");
-    }
+    const error = captureThrown(getFirebaseApp);
+
+    expect(error).toMatchObject({
+      code: "FIREBASE_INITIALIZATION_FAILED",
+      message: "공유 일정 기능을 초기화하지 못했습니다.",
+    });
+    expect(String(error)).not.toContain("public-api-key");
+    expect(String(error)).not.toContain("public-site-key");
+    expect(String(error)).not.toContain("VITE_FIREBASE");
+    expect(String(error)).not.toContain("must-not-leak-other-project");
+    expect(firebaseSdk.initializeApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("initializes a default app when only named apps exist", async () => {
+    stubRuntimeEnv();
+    seedMockFirebaseApp(
+      "named-app",
+      firebaseSdk.namedApp,
+      EXPECTED_FIREBASE_OPTIONS,
+    );
+    const { getFirebaseApp } = await import("./app");
+
+    expect(getFirebaseApp()).toBe(firebaseSdk.app);
+    expect(firebaseSdk.apps.get("named-app")?.app).toBe(firebaseSdk.namedApp);
+    expect(firebaseSdk.apps.get("[DEFAULT]")?.app).toBe(firebaseSdk.app);
+    expect(firebaseSdk.initializeApp).toHaveBeenCalledWith(
+      EXPECTED_FIREBASE_OPTIONS,
+    );
+    expect(firebaseSdk.getApps).not.toHaveBeenCalled();
+    expect(firebaseSdk.getApp).not.toHaveBeenCalled();
   });
 });
 
@@ -503,18 +658,18 @@ describe("App Check boundary", () => {
       throw new Error("expected enabled Firebase config");
     }
 
-    try {
+    const error = captureThrown(() => {
       initializeWebAppCheck(firebaseSdk.app, config.value);
-      throw new Error("expected initializeWebAppCheck to throw");
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: "APPCHECK_INITIALIZATION_FAILED",
-        message: "App Check를 초기화하지 못했습니다.",
-      });
-      expect(String(error)).not.toContain("public-api-key");
-      expect(String(error)).not.toContain("public-site-key");
-      expect(String(error)).not.toContain("VITE_FIREBASE");
-    }
+    });
+
+    expect(error).toMatchObject({
+      code: "APPCHECK_INITIALIZATION_FAILED",
+      message: "App Check를 초기화하지 못했습니다.",
+    });
+    expect(String(error)).not.toContain("public-api-key");
+    expect(String(error)).not.toContain("public-site-key");
+    expect(String(error)).not.toContain("VITE_FIREBASE");
+    expect(firebaseSdk.initializeAppCheck).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -585,17 +740,15 @@ describe("student and administrator authentication boundaries", () => {
     );
     const { ensureAnonymousStudent } = await import("./auth");
 
-    try {
-      await ensureAnonymousStudent();
-      throw new Error("expected ensureAnonymousStudent to reject");
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: "AUTH_ANONYMOUS_SIGN_IN_FAILED",
-        message: "학생 인증에 실패했습니다. 잠시 후 다시 시도해 주세요.",
-      });
-      expect(String(error)).not.toContain("Firebase raw error");
-      expect(String(error)).not.toContain("public-api-key");
-    }
+    const error = await captureRejection(ensureAnonymousStudent);
+
+    expect(error).toMatchObject({
+      code: "AUTH_ANONYMOUS_SIGN_IN_FAILED",
+      message: "학생 인증에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+    });
+    expect(String(error)).not.toContain("Firebase raw error");
+    expect(String(error)).not.toContain("public-api-key");
+    expect(firebaseSdk.signInAnonymously).toHaveBeenCalledTimes(1);
   });
 
   it("signs an administrator in with Google and local persistence", async () => {
@@ -622,13 +775,14 @@ describe("student and administrator authentication boundaries", () => {
     );
     const { signInAdminWithGoogle } = await import("./auth");
 
-    await expect(signInAdminWithGoogle()).rejects.toMatchObject({
+    const error = await captureRejection(signInAdminWithGoogle);
+
+    expect(error).toMatchObject({
       code: "AUTH_ADMIN_SIGN_IN_FAILED",
       message: "관리자 로그인에 실패했습니다. 다시 시도해 주세요.",
     });
-    await signInAdminWithGoogle().catch((error: unknown) => {
-      expect(String(error)).not.toContain("popup raw error");
-    });
+    expect(String(error)).not.toContain("popup raw error");
+    expect(firebaseSdk.signInWithPopup).toHaveBeenCalledTimes(1);
   });
 
   it("signs out through the configured Auth instance", async () => {
@@ -644,13 +798,14 @@ describe("student and administrator authentication boundaries", () => {
     firebaseSdk.signOut.mockRejectedValue(new Error("Firebase sign-out raw"));
     const { signOutCurrentUser } = await import("./auth");
 
-    await expect(signOutCurrentUser()).rejects.toMatchObject({
+    const error = await captureRejection(signOutCurrentUser);
+
+    expect(error).toMatchObject({
       code: "AUTH_SIGN_OUT_FAILED",
       message: "로그아웃에 실패했습니다. 다시 시도해 주세요.",
     });
-    await signOutCurrentUser().catch((error: unknown) => {
-      expect(String(error)).not.toContain("sign-out raw");
-    });
+    expect(String(error)).not.toContain("sign-out raw");
+    expect(firebaseSdk.signOut).toHaveBeenCalledTimes(1);
   });
 
   it("returns the Firebase auth-state unsubscribe function", async () => {
@@ -674,15 +829,15 @@ describe("student and administrator authentication boundaries", () => {
     });
     const { subscribeAuthState } = await import("./auth");
 
-    try {
+    const error = captureThrown(() => {
       subscribeAuthState(vi.fn());
-      throw new Error("expected subscribeAuthState to throw");
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: "AUTH_SUBSCRIPTION_FAILED",
-        message: "로그인 상태를 확인하지 못했습니다.",
-      });
-      expect(String(error)).not.toContain("subscription raw");
-    }
+    });
+
+    expect(error).toMatchObject({
+      code: "AUTH_SUBSCRIPTION_FAILED",
+      message: "로그인 상태를 확인하지 못했습니다.",
+    });
+    expect(String(error)).not.toContain("subscription raw");
+    expect(firebaseSdk.onAuthStateChanged).toHaveBeenCalledTimes(1);
   });
 });
