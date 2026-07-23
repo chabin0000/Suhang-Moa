@@ -770,6 +770,76 @@ button:disabled {
   padding: 20px;
 }
 
+.schedule-details {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.details-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.details-meta div {
+  min-width: 0;
+}
+
+.details-meta dt {
+  color: var(--genesis-text-secondary);
+  font-size: 12px;
+}
+
+.details-meta dd {
+  overflow-wrap: anywhere;
+  margin: 4px 0 0;
+  font-weight: 700;
+}
+
+.details-description,
+.opinion-list p {
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.opinion-list {
+  border-top: 1px solid var(--genesis-border);
+  padding-top: 16px;
+}
+
+.opinion-list h3,
+.opinion-form h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.opinion-list ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.opinion-list li {
+  border-left: 3px solid var(--genesis-primary);
+  padding-left: 10px;
+}
+
+.opinion-list li p {
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+.opinion-form {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--genesis-border);
+  padding-top: 16px;
+}
+
 .modal-header,
 .modal-actions {
   display: flex;
@@ -893,6 +963,10 @@ button:disabled {
 
   .modal-backdrop {
     place-items: center;
+  }
+
+  .schedule-details {
+    padding: 24px;
   }
 }
 

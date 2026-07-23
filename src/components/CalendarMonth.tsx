@@ -70,11 +70,15 @@ export default function CalendarMonth({
                   ]
                     .filter(Boolean)
                     .join(" ")}
+                  onClick={() => onSelectDate(day.dateKey)}
                 >
                   <button
                     type="button"
                     className="date-number-button"
-                    onClick={() => onSelectDate(day.dateKey)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectDate(day.dateKey);
+                    }}
                     aria-label={`${day.dateKey} 일정 추가`}
                     title={`${day.dateKey} 일정 추가`}
                   >
@@ -92,7 +96,10 @@ export default function CalendarMonth({
                           key={`${item.source}:${item.id}`}
                           type="button"
                           className={`event-pill type-${item.type}`}
-                          onClick={() => onSelectItem(item)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onSelectItem(item);
+                          }}
                           aria-label={`${day.dateKey} ${item.title} ${sourceLabel} 열기`}
                           title={`${item.title} · ${sourceLabel}`}
                         >

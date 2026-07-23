@@ -13,6 +13,7 @@ type ScheduleListProps = {
   activeFilter: SummaryFilter;
   selectedItemKey: string | null;
   onClearFilter: () => void;
+  onSelectItem: (item: CalendarItem) => void;
   onEditPersonal: (schedule: PersonalSchedule) => void;
   onDeletePersonal: (scheduleId: string) => void;
 };
@@ -28,6 +29,7 @@ export default function ScheduleList({
   activeFilter,
   selectedItemKey,
   onClearFilter,
+  onSelectItem,
   onEditPersonal,
   onDeletePersonal,
 }: ScheduleListProps) {
@@ -61,7 +63,14 @@ export default function ScheduleList({
                 key={itemKey}
                 id={`calendar-item-${itemKey}`}
                 className={`schedule-card ${selectedItemKey === itemKey ? "is-selected" : ""}`}
-                tabIndex={-1}
+                tabIndex={0}
+                onClick={() => onSelectItem(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectItem(item);
+                  }
+                }}
               >
                 <div className="schedule-card-main">
                   <div className="schedule-badges">
@@ -91,7 +100,10 @@ export default function ScheduleList({
                     <button
                       type="button"
                       className="secondary-button"
-                      onClick={() => onEditPersonal(item)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onEditPersonal(item);
+                      }}
                     >
                       <Pencil size={16} aria-hidden="true" />
                       수정
@@ -99,7 +111,10 @@ export default function ScheduleList({
                     <button
                       type="button"
                       className="destructive-button"
-                      onClick={() => onDeletePersonal(item.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDeletePersonal(item.id);
+                      }}
                     >
                       <Trash2 size={16} aria-hidden="true" />
                       삭제

@@ -166,6 +166,27 @@ describe("ClassDashboard personal CRUD and shared permissions", () => {
   });
 });
 
+describe("Schedule detail entry points", () => {
+  it("opens the same details dialog from a calendar pill and a list row", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-20T12:00:00.000Z"));
+    renderDashboard();
+
+    const calendarPill = document.querySelector<HTMLButtonElement>(".event-pill");
+    if (!calendarPill) {
+      throw new Error("calendar pill was not rendered");
+    }
+    fireEvent.click(calendarPill);
+    const detailTitle = screen.getByRole("dialog").querySelector("h2")?.textContent;
+    expect(detailTitle).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "상세 닫기" }));
+
+    fireEvent.click(scheduleCard(detailTitle ?? ""));
+    expect(screen.getByRole("dialog").querySelector("h2")).toHaveTextContent(detailTitle ?? "");
+    vi.useRealTimers();
+  });
+});
+
 describe("CalendarMonth interactions", () => {
   it("날짜 선택 버튼과 일정 열기 버튼을 분리한다", () => {
     const onSelectDate = vi.fn();

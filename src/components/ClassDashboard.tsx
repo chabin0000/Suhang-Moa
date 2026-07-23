@@ -19,6 +19,7 @@ import ProposalModal from "./ProposalModal";
 import ProposalStatusPanel from "./ProposalStatusPanel";
 import ScheduleList from "./ScheduleList";
 import ScheduleModal from "./ScheduleModal";
+import ScheduleDetails from "./ScheduleDetails";
 import SummaryWidgets from "./SummaryWidgets";
 
 type ClassDashboardProps = {
@@ -48,6 +49,7 @@ export default function ClassDashboard({
   const [activeFilter, setActiveFilter] = useState<SummaryFilter>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
+  const [detailsItem, setDetailsItem] = useState<CalendarItem | null>(null);
   const [proposalOpen, setProposalOpen] = useState(false);
 
   const calendarItems = useMemo(
@@ -98,7 +100,7 @@ export default function ClassDashboard({
     }
 
     const card = document.getElementById(`calendar-item-${selectedItemKey}`);
-    card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    card?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
     card?.focus({ preventScroll: true });
   }, [filteredItems, selectedItemKey]);
 
@@ -161,6 +163,7 @@ export default function ClassDashboard({
   function openCalendarItem(item: CalendarItem): void {
     setActiveFilter(null);
     setSelectedItemKey(`${item.source}:${item.id}`);
+    setDetailsItem(item);
   }
 
   function submitModal(draft: ScheduleDraft): void {
@@ -228,6 +231,7 @@ export default function ClassDashboard({
         activeFilter={activeFilter}
         selectedItemKey={selectedItemKey}
         onClearFilter={() => setActiveFilter(null)}
+        onSelectItem={openCalendarItem}
         onEditPersonal={openEditModal}
         onDeletePersonal={deletePersonalSchedule}
       />
@@ -249,6 +253,14 @@ export default function ClassDashboard({
           }
           onCancel={closeScheduleModal}
           onSubmit={submitModal}
+        />
+      )}
+      {detailsItem && (
+        <ScheduleDetails
+          item={detailsItem}
+          onClose={() => setDetailsItem(null)}
+          onEditPersonal={(schedule) => openEditModal(schedule)}
+          onDeletePersonal={(schedule) => deletePersonalSchedule(schedule.id)}
         />
       )}
       {proposalOpen && (
