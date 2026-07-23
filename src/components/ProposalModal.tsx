@@ -1,7 +1,6 @@
 import { Send, X } from "lucide-react";
 import { useState } from "react";
 import { proposalDraftSchema } from "../schemas/proposal";
-import { ProposalSubmitError } from "../services/proposalService";
 import type { ClassId, ProposalDraft, ScheduleType } from "../types";
 import { SCHEDULE_TYPES, scheduleTypeLabels } from "../types";
 import ProposalCart from "./ProposalCart";
@@ -18,6 +17,19 @@ const emptySchedule = { title: "", subject: "", description: "", type: "" as Sch
 function classLabel(classId: ClassId): string {
   const match = /^grade-(\d)-class-(\d+)$/.exec(classId);
   return match ? `${match[1]}학년 ${match[2]}반` : classId;
+}
+
+function isProposalSubmitError(error: unknown): error is { message: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "validation" ||
+      error.code === "logout-required" ||
+      error.code === "submission-failed") &&
+    "message" in error &&
+    typeof error.message === "string"
+  );
 }
 
 export default function ProposalModal({ classId, onCancel, submitBatch, onSubmitted }: ProposalModalProps) {
@@ -57,7 +69,7 @@ export default function ProposalModal({ classId, onCancel, submitBatch, onSubmit
       window.localStorage.setItem("classmap-proposal-cooldown", String(Date.now() + 30_000));
       onSubmitted?.();
     } catch (submitError) {
-      setError(submitError instanceof ProposalSubmitError ? submitError.message : "검토 요청에 실패했습니다. 다시 시도해 주세요.");
+      setError(isProposalSubmitError(submitError) ? submitError.message : "검토 요청에 실패했습니다. 다시 시도해 주세요.");
     } finally { setSubmitting(false); }
   }
 

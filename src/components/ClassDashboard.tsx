@@ -1,7 +1,6 @@
 import { RefreshCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { SharedScheduleErrorCode } from "../services/sharedScheduleService";
-import { loadDefaultProposalBatchSubmitter } from "../services/proposalService";
 import type {
   CalendarItem,
   ClassId,
@@ -257,6 +256,9 @@ export default function ClassDashboard({
           classId={`grade-${selectedClass.grade as 1 | 2 | 3}-class-${selectedClass.classNo}` as ClassId}
           onCancel={() => setProposalOpen(false)}
           submitBatch={async (classId, drafts) => {
+            const { loadDefaultProposalBatchSubmitter } = await import(
+              "../services/proposalService"
+            );
             const submitBatch = await loadDefaultProposalBatchSubmitter();
             return submitBatch(classId, drafts);
           }}
