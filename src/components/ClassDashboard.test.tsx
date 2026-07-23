@@ -97,7 +97,7 @@ describe("ClassDashboard personal CRUD and shared permissions", () => {
     expect(
       screen.getByRole("heading", { name: "개인 물리 보고서" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "일정 추가" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "일정 추가 메뉴" })).toBeEnabled();
   });
 
   it.each([
@@ -114,7 +114,8 @@ describe("ClassDashboard personal CRUD and shared permissions", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderDashboard();
 
-    fireEvent.click(screen.getByRole("button", { name: "일정 추가" }));
+    fireEvent.click(screen.getByRole("button", { name: "일정 추가 메뉴" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "내 일정 추가" }));
     fireEvent.change(screen.getByLabelText("제목"), {
       target: { value: "새 개인 일정" },
     });

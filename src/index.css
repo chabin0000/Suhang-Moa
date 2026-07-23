@@ -719,6 +719,31 @@ button:disabled {
   background: var(--genesis-primary-hover);
 }
 
+.add-schedule-menu { position: fixed; right: 20px; bottom: 20px; z-index: 20; }
+.add-schedule-menu .floating-add-button { position: static; width: 48px; padding: 0; }
+.add-schedule-popover { position: absolute; right: 0; bottom: 58px; display: grid; min-width: 180px; overflow: hidden; border: 1px solid var(--genesis-border); border-radius: 6px; background: var(--genesis-surface); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14); }
+.add-schedule-popover button { display: flex; align-items: center; gap: 8px; border: 0; border-bottom: 1px solid var(--genesis-border); background: var(--genesis-surface); padding: 12px; color: var(--genesis-text-primary); font-weight: 700; text-align: left; }
+.add-schedule-popover button:last-child { border-bottom: 0; }
+.add-schedule-popover button:hover { background: rgba(99, 102, 241, 0.08); }
+.class-badge, .proposal-status { display: inline-flex; width: fit-content; margin: 0; border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 9999px; background: rgba(99, 102, 241, 0.08); color: var(--genesis-primary-hover); padding: 4px 10px; font-size: 12px; font-weight: 700; }
+.proposal-cart { border-top: 1px solid var(--genesis-border); border-bottom: 1px solid var(--genesis-border); }
+.proposal-cart-header, .proposal-cart li, .proposal-status-panel li > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.proposal-cart-header { padding: 10px 0; }
+.proposal-cart ul, .proposal-status-panel ul { display: grid; max-height: 244px; margin: 0; overflow: auto; padding: 0; list-style: none; }
+.proposal-cart li, .proposal-status-panel li { padding: 10px 0; border-top: 1px solid var(--genesis-border); }
+.proposal-cart li span { display: grid; min-width: 0; gap: 3px; }
+.proposal-cart li strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proposal-cart li small, .proposal-cart-empty { color: var(--genesis-text-secondary); }
+.proposal-cart-empty { margin: 0; padding: 12px 0; font-size: 14px; }
+.proposal-success { margin: 0; color: var(--genesis-success); font-weight: 700; }
+.honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; }
+.proposal-status-panel { border-top: 1px solid var(--genesis-border); margin-top: 20px; padding-top: 16px; }
+.proposal-status-panel header h2 { margin: 4px 0 12px; font-size: 20px; }
+.proposal-status-panel li { display: grid; gap: 8px; }
+.proposal-status-panel li p { margin: 0; color: var(--genesis-error); font-size: 14px; }
+.proposal-status-approved { border-color: rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.08); color: #047857; }
+.proposal-status-rejected { border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); color: #b91c1c; }
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -942,4 +967,6 @@ button:disabled {
     right: 16px;
     bottom: 16px;
   }
+
+  .add-schedule-menu { right: 16px; bottom: 16px; }
 }

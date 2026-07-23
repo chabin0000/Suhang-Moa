@@ -1,8 +1,10 @@
-import { CalendarPlus, RefreshCcw } from "lucide-react";
+import { RefreshCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { SharedScheduleErrorCode } from "../services/sharedScheduleService";
+import { loadDefaultProposalBatchSubmitter } from "../services/proposalService";
 import type {
   CalendarItem,
+  ClassId,
   PersonalSchedule,
   ScheduleDraft,
   SelectedClass,
@@ -13,6 +15,9 @@ import { getCalendarItemsForClass } from "../utils/calendarItems";
 import { getTodayKey, getTomorrowKey, isWithinNextDays, moveMonth } from "../utils/date";
 import { createScheduleId, getSchedules, saveSchedules } from "../utils/storage";
 import CalendarMonth from "./CalendarMonth";
+import AddScheduleMenu from "./AddScheduleMenu";
+import ProposalModal from "./ProposalModal";
+import ProposalStatusPanel from "./ProposalStatusPanel";
 import ScheduleList from "./ScheduleList";
 import ScheduleModal from "./ScheduleModal";
 import SummaryWidgets from "./SummaryWidgets";
@@ -44,6 +49,7 @@ export default function ClassDashboard({
   const [activeFilter, setActiveFilter] = useState<SummaryFilter>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
+  const [proposalOpen, setProposalOpen] = useState(false);
 
   const calendarItems = useMemo(
     () =>
@@ -227,16 +233,11 @@ export default function ClassDashboard({
         onDeletePersonal={deletePersonalSchedule}
       />
 
-      <button
-        type="button"
-        className="floating-add-button"
-        onClick={() => openCreateModal()}
-        aria-label="일정 추가"
-        title="일정 추가"
-      >
-        <CalendarPlus size={21} aria-hidden="true" />
-        일정 추가
-      </button>
+      <ProposalStatusPanel />
+      <AddScheduleMenu
+        onAddPersonal={() => openCreateModal()}
+        onProposeClass={() => setProposalOpen(true)}
+      />
 
       {modalState && (
         <ScheduleModal
@@ -249,6 +250,16 @@ export default function ClassDashboard({
           }
           onCancel={closeScheduleModal}
           onSubmit={submitModal}
+        />
+      )}
+      {proposalOpen && (
+        <ProposalModal
+          classId={`grade-${selectedClass.grade as 1 | 2 | 3}-class-${selectedClass.classNo}` as ClassId}
+          onCancel={() => setProposalOpen(false)}
+          submitBatch={async (classId, drafts) => {
+            const submitBatch = await loadDefaultProposalBatchSubmitter();
+            return submitBatch(classId, drafts);
+          }}
         />
       )}
     </section>
