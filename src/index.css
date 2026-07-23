@@ -467,7 +467,7 @@ button:disabled {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   width: 100%;
   height: 26px;
   min-height: 26px;
@@ -514,7 +514,7 @@ button:disabled {
 }
 
 .event-pill .source-badge {
-  padding: 2px 4px;
+  padding: 2px 3px;
   font-size: 9px;
 }
 
@@ -869,21 +869,7 @@ button:disabled {
   }
 }
 
-@media (max-width: 430px) {
-  .dashboard-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .dashboard-header .secondary-button,
-  .primary-button {
-    width: 100%;
-  }
-
-  .calendar-toolbar .secondary-button {
-    width: 100%;
-  }
-
+@media (max-width: 640px) {
   .date-cell {
     height: 96px;
     padding: 6px 1px;
@@ -913,6 +899,22 @@ button:disabled {
 
   .source-label-full {
     display: none;
+  }
+}
+
+@media (max-width: 430px) {
+  .dashboard-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-header .secondary-button,
+  .primary-button {
+    width: 100%;
+  }
+
+  .calendar-toolbar .secondary-button {
+    width: 100%;
   }
 
   .floating-add-button {
