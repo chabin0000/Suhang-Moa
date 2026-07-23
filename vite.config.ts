@@ -8,7 +8,9 @@ export default defineConfig(({ mode }) => {
   assertFirebaseEnvForCiProduction(env, mode, process.env.CI);
 
   return {
-    base: mode === "e2e" ? "/" : "/Suhang-Moa/",
+    base: mode === "e2e" || process.env.VITE_DEPLOY_TARGET === "firebase"
+      ? "/"
+      : "/Suhang-Moa/",
     build: {
       rollupOptions: {
         input: "src/main.tsx",
